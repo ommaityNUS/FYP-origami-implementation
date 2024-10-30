@@ -23,7 +23,9 @@ let allPathsSourceTarget = function (graph, start, target) {
 
     let dfs = function (node, curr) {
         if (node === target) {
-            result.push(curr);
+            if (curr.length > 2) {
+                result.push(curr);
+            }
             return;
         }
 
