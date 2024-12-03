@@ -75,7 +75,6 @@ let allPathsSourceTarget = function (graph, start, end) {
 };
 
 // function to find valid paths
-//** need to add additional restriction of not being able to travel along edge nodes */
 let validPath = function (allPaths) {
     ans = []
     
