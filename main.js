@@ -11,12 +11,12 @@ const uploadFile = (event) => {
         const FOLD = JSON.parse(fr.result);
 
         const displayOuterEdgeNodes = () => {
-            const facesVertices = FOLD["faces_vertices"];
+            const faces_vertices = FOLD["faces_vertices"];
             const faceOrders = FOLD["faceOrders"]
-            const outerEdgeNodes = findOuterEdgeNodes(facesVertices);
+            const outerEdgeNodes = findOuterEdgeNodes(faces_vertices);
             document.getElementById('outerEdgeNodes').textContent = "Outer edge nodes are: " + Array.from(outerEdgeNodes);
-            let leftOrRight = "edge -> [leftFace, rightFace]";
-            findLeftRight(facesVertices, faceOrders).forEach((value, key) => {
+            let leftOrRight = "edge -> [leftFace, rightFace, faceOrder]";
+            findLeftRightFO(faces_vertices, faceOrders).forEach((value, key) => {
                 leftOrRight += `\n${key} -> [${value.join(", ")}]`;
             });
             document.getElementById('leftOrRight').textContent = leftOrRight;
@@ -54,18 +54,16 @@ const findOuterEdgeNodes = (FV) => {
             }
         }
     }
-
     // Collect outer edge nodes
     for (const edge of nonRepeatingEdges.values()) {
         for (const node of edge) {
             ans.add(node);
         }
     }
-
     return ans;
 }
 
-const findLeftRight = (FV, FO) => {
+const findLeftRightFO = (FV, FO) => {
     const edgeFaceAdjacency = new Map();
     FV.forEach((face, i) => {
         face.forEach((current, j) => {
@@ -74,44 +72,32 @@ const findLeftRight = (FV, FO) => {
             const reverseEdgeKey = [next, current].toString();
 
             if (edgeFaceAdjacency.has(reverseEdgeKey)) {
-                // If reverse edge exists, assign `i` as the left face
                 edgeFaceAdjacency.get(reverseEdgeKey)[0] = i;
             } else {
-                // Otherwise, set current edge with `i` as the right face
-                edgeFaceAdjacency.set(edgeKey, [, i, ]);
+                edgeFaceAdjacency.set(edgeKey, [, i]);
             }
-
-    ///////// this portion was chatgptd
-            // if (FO.some(innerArray => `${innerArray[0]},${innerArray[1]}` === edgeKey)) {
-            //     // Check if edgeKey exists in the map
-            //     if (!edgeFaceAdjacency.has(edgeKey)) {
-            //         // Initialize edgeFaceAdjacency with a default value (e.g., an array with 3 null values)
-            //         edgeFaceAdjacency.set(edgeKey, [null, null, null]);
-            //     }
-            //     // Update the third element of the array for the matching edgeKey
-            //     edgeFaceAdjacency.get(edgeKey)[2] = FO.find(innerArray => `${innerArray[0]},${innerArray[1]}` === edgeKey)[2];
-            // } else if (FO.some(innerArray => `${innerArray[1]},${innerArray[0]}` === edgeKey)) {
-            //     // Check if edgeKey exists in the map
-            //     if (!edgeFaceAdjacency.has(edgeKey)) {
-            //         // Initialize edgeFaceAdjacency with a default value (e.g., an array with 3 null values)
-            //         edgeFaceAdjacency.set(edgeKey, [null, null, null]);
-            //     }
-            //     // Update the third element of the array for the matching edgeKey
-            //     edgeFaceAdjacency.get(edgeKey)[2] = FO.find(innerArray => `${innerArray[0]},${innerArray[1]}` === edgeKey)[2];
-            // }
-            // // } else if (FO.some(innerArray => `${innerArray[0]},${innerArray[1]}` === reverseEdgeKey)) {
-            // //     edgeFaceAdjacency.get
-            // // } 
-            // else {
-            //     edgeFaceAdjacency.get(edgeKey)[2] = 0
-            // }
-            // if (qwe) {
-            // }
-
         });
     });
+
+    // Build a lookup map for FO
+    const FOMap = new Map();
+    FO.forEach(innerArray => {
+        const key = [innerArray[0], innerArray[1]].toString();
+        FOMap.set(key, innerArray[2]);
+        const reverseKey = [innerArray[1], innerArray[0]].toString();
+        FOMap.set(reverseKey, -innerArray[2]);
+    });
+
+    for (const a of edgeFaceAdjacency.values()) {
+        const edgeKey = [a[0], a[1]].toString();
+        if (FOMap.has(edgeKey)) {
+            a.push(FOMap.get(edgeKey));
+        }
+    }
+
     return edgeFaceAdjacency;
 };
+
  
 // console.log(findLeftRight(faces))
 
