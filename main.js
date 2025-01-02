@@ -13,17 +13,78 @@ const uploadFile = (event) => {
         const displayOuterEdgeNodes = () => {
             const faces_vertices = FOLD["faces_vertices"];
             const faceOrders = FOLD["faceOrders"]
+
             const outerEdgeNodes = findOuterEdgeNodes(faces_vertices);
             document.getElementById('outerEdgeNodes').textContent = "Outer edge nodes are: " + Array.from(outerEdgeNodes);
-            let leftOrRight = "edge -> [leftFace, rightFace, faceOrder]";
+            
+            let leftOrRight = "edge -> [leftFace, rightFace, localFaceOrder, globalFaceOrder]";
             findLeftRightFO(faces_vertices, faceOrders).forEach((value, key) => {
                 leftOrRight += `\n${key} -> [${value.join(", ")}]`;
             });
             document.getElementById('leftOrRight').textContent = leftOrRight;
+
+            let globalFO = "face -> orientation" 
+            findGlobalFO(faces_vertices, faceOrders).forEach((value, key) => {
+                globalFO += `\n${key} -> [${value}]`;
+            })
+            document.getElementById('globalFO').textContent = globalFO
+        }
+
+        const drawSVG = () => {
+            const VC = FOLD["vertices_coords"]
+            const EV = FOLD["edges_vertices"]
+            const scale = 500
+            const adjustedScale = 490
+
+            const container = document.createElement('div');
+            container.id = 'svg-container';
+            // document.body.appendChild(container);
+            document.getElementById('outerEdgeNodes').prepend(container)
+
+            const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+            svg.setAttribute('width', '500');
+            svg.setAttribute('height', '500');
+            svg.setAttribute('style', 'border: none');
+            // svg.setAttribute('viewBox', '-10 -10 10 10'); // Add padding of 10 units around
+            // svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+
+            VC.forEach(vc => {
+                const [x, y] = vc;
+                console.log( [x, y]) 
+                // Destructure x and y from the inner list
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', x*(adjustedScale));
+                circle.setAttribute('cy', y*(adjustedScale));
+                circle.setAttribute('r', '3');
+                circle.setAttribute('fill', 'blue');
+                svg.appendChild(circle);
+            });
+
+            EV.forEach(([ev1, ev2]) => {
+            let [x1, y1] = VC[ev1];
+            let [x2, y2] = VC[ev2];
+            x1 = x1 * adjustedScale;
+            y1 = y1 * adjustedScale;
+            x2 = x2 * adjustedScale;
+            y2 = y2 * adjustedScale;
+
+            const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+            line.setAttribute('x1', x1);
+            line.setAttribute('y1', y1);
+            line.setAttribute('x2', x2);
+            line.setAttribute('y2', y2);
+            line.setAttribute('stroke', 'black');
+            line.setAttribute('stroke-width', '1');
+
+            svg.appendChild(line)
+            })
+
+            container.appendChild(svg)
         }
 
         const submit = document.getElementById("submit");
         submit.addEventListener("click", displayOuterEdgeNodes);
+        submit.addEventListener("click", drawSVG)
     };
 
     fr.readAsText(event.target.files[0]); // Use event.target for file input reference
@@ -31,6 +92,7 @@ const uploadFile = (event) => {
 
 // Attach the uploadFile function to the file input
 document.getElementById("foldFile").addEventListener("change", uploadFile);
+
 
 // FV = faces vertices
 const findOuterEdgeNodes = (FV) => {
@@ -81,22 +143,47 @@ const findLeftRightFO = (FV, FO) => {
 
     // Build a lookup map for FO
     const FOMap = new Map();
-    FO.forEach(innerArray => {
-        const key = [innerArray[0], innerArray[1]].toString();
-        FOMap.set(key, innerArray[2]);
-        const reverseKey = [innerArray[1], innerArray[0]].toString();
-        FOMap.set(reverseKey, -innerArray[2]);
+    FO.forEach(fo => {
+        const key = [fo[0], fo[1]].toString();
+        FOMap.set(key, fo[2]);
+        const reverseKey = [fo[1], fo[0]].toString();
+        FOMap.set(reverseKey, -fo[2]);
     });
 
-    for (const a of edgeFaceAdjacency.values()) {
-        const edgeKey = [a[0], a[1]].toString();
+    for (const fv of edgeFaceAdjacency.values()) {
+        const edgeKey = [fv[0], fv[1]].toString();
         if (FOMap.has(edgeKey)) {
-            a.push(FOMap.get(edgeKey));
+            fv.push(FOMap.get(edgeKey));
         }
     }
-
     return edgeFaceAdjacency;
 };
+
+const findGlobalFO = (FV, FO) => {
+    ans = new Map()
+    const up = 1
+    const down = -1
+    let direction = down
+    for (let i = 0; i < FV.length; i++) {    
+        // console.log(i, i+1)    
+        const foExists = FO.some(fo => 
+            (fo[0] === i && fo[1] === (i+1) % FV.length) ||
+            (fo[1] === i && fo[0] === (i+1) % FV.length)
+        );
+        if (foExists) {
+            // console.log(direction)
+            if (direction == up) {
+                direction = down
+                ans.set(i, direction)
+            } else if (direction == down) {
+                direction = up
+                ans.set(i, direction)
+            }
+        } else ans.set(i, direction)
+    } return ans
+}
+
+
 
  
 // console.log(findLeftRight(faces))
