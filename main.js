@@ -19,10 +19,6 @@ const uploadFile = (event) => {
             const vertices_coords = FOLD["vertices_coords"]
             const faceOrders = X.V_FV_EV_EA_2_Vf_Ff(vertices_coords, faces_vertices, edges_vertices, edges_assignment)[1]
             const foldedStateV = X.V_FV_EV_EA_2_Vf_Ff(vertices_coords, faces_vertices, edges_vertices, edges_assignment)[0]
-            
-            // const svgContainer = document.getElementById("svg-container")
-            // const colors = edges_assignment.map(a => GUI.COLORS.edge[a]);
-            // SVG.draw_points(svgContainer, foldedStateV, {text: true, fill: colors})
      
             const outerEdgeNodes = findOuterEdgeNodes(faces_vertices);
             document.getElementById('outerEdgeNodes').textContent = "Outer edge nodes are: " + Array.from(outerEdgeNodes);
@@ -38,24 +34,40 @@ const uploadFile = (event) => {
                 globalFO += `\n${key} -> [${value}]`;
             })
             document.getElementById('globalFO').textContent = globalFO
-
-            // SVG.draw_polygons(svgContainer, foldedStateV)
         }
 
-        const drawSVG = () => {
-            const VC = FOLD["vertices_coords"]; // Vertex coordinates
-            const EV = FOLD["edges_vertices"]; // Edge definitions
-            const FV = FOLD["faces_vertices"]; // Replace with your actual logic to get faces
-            const scale = 500;
-            const adjustedScale = 490;
-            const svgNamespace = 'http://www.w3.org/2000/svg';
-        
+        const drawSVG = (folded) => {
+            let VC = FOLD["vertices_coords"]; // Vertex coordinates
+            let EV = FOLD["edges_vertices"]; // Edge definitions
+            let FV = FOLD["faces_vertices"]; // Replace with your actual logic to get faces
+            let FO = FOLD["faceOrders"]
+            let EA = FOLD["edges_assignment"];
+            const scale = 500
+            const adjustedScale = 490
+            const svgNameSpace = 'http://www.w3.org/2000/svg';
+            let edgeFaceAdjacency = ''
+
+            if (folded == "unfolded") {
+                VC = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[0]; // Vertex coordinates
+                edgeFaceAdjacency = findLeftRightFO(FV);
+            }
+
             // Create container and SVG element
-            const container = document.createElement('div');
-            container.id = 'svg-container';
-            document.getElementById('outerEdgeNodes').prepend(container);
-        
-            const svg = document.createElementNS(svgNamespace, 'svg');
+            let container1 = document.getElementById('container1');
+            let container2 = document.getElementById('container2');
+            if (container1) {
+                container2 = document.createElement('div')
+                container2.id = 'container2'
+                container2.style.display = 'inline-block';
+                document.getElementById('outerEdgeNodes').insertAdjacentElement('beforebegin', container2);
+            } else {
+                container1 = document.createElement('div')
+                container1.id = 'container1'
+                container1.style.display = 'inline-block';
+                document.getElementById('outerEdgeNodes').insertAdjacentElement('beforebegin', container1);
+            }
+            
+            const svg = document.createElementNS(svgNameSpace, 'svg');
             svg.setAttribute('width', '500');
             svg.setAttribute('height', '500');
             svg.setAttribute('viewBox', '-10 -10 520 520');
@@ -64,17 +76,22 @@ const uploadFile = (event) => {
             // Draw vertices
             VC.forEach((vc, i) => {
                 const [x, y] = vc;
-                const circle = document.createElementNS(svgNamespace, 'circle');
+                const circle = document.createElementNS(svgNameSpace, 'circle');
                 circle.setAttribute('id', `vertex_${i}`);
                 circle.setAttribute('cx', x * adjustedScale);
                 circle.setAttribute('cy', y * adjustedScale);
-                circle.setAttribute('r', '3');
-                circle.setAttribute('fill', 'blue');
+                circle.setAttribute('r', '2');
+                circle.setAttribute('fill', 'black');
                 svg.appendChild(circle);
             });
         
             // Draw edges
-            EV.forEach(([ev1, ev2]) => {
+            const colors = new Map();
+            colors.set('M', 'red')
+            colors.set('V', 'blue')
+            colors.set('B', 'grey')
+            EV.forEach((ev, index) => {
+                let [ev1, ev2] = ev;
                 let [x1, y1] = VC[ev1];
                 let [x2, y2] = VC[ev2];
                 x1 = x1 * adjustedScale;
@@ -82,85 +99,90 @@ const uploadFile = (event) => {
                 x2 = x2 * adjustedScale;
                 y2 = y2 * adjustedScale;
         
-                const line = document.createElementNS(svgNamespace, 'line');
+                const line = document.createElementNS(svgNameSpace, 'line');
                 line.setAttribute('x1', x1);
                 line.setAttribute('y1', y1);
                 line.setAttribute('x2', x2);
                 line.setAttribute('y2', y2);
-                line.setAttribute('stroke', 'black');
+                if (folded == "unfolded") {
+                    line.setAttribute('stroke', colors.get(EA[index]));
+                } else {
+                    line.setAttribute('stroke', 'grey');
+                }
                 line.setAttribute('stroke-width', '1');
                 svg.appendChild(line);
             });
         
             // Add arrow marker
-            const marker = document.createElementNS(svgNamespace, 'marker');
+            const marker = document.createElementNS(svgNameSpace, 'marker');
             marker.setAttribute('id', 'arrow');
             marker.setAttribute('viewBox', '0 0 10 10');
             marker.setAttribute('refX', '5');
             marker.setAttribute('refY', '5');
-            marker.setAttribute('markerWidth', '4');
-            marker.setAttribute('markerHeight', '4');
+            marker.setAttribute('markerWidth', '10');
+            marker.setAttribute('markerHeight', '10');
             marker.setAttribute('orient', 'auto');
         
-            const path = document.createElementNS(svgNamespace, 'path');
+            const path = document.createElementNS(svgNameSpace, 'path');
             path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 Z');
-            path.setAttribute('fill', 'red');
+            path.setAttribute('fill', 'green');
             marker.appendChild(path);
             svg.appendChild(marker);
         
-            // Helper: Calculate centroid of a face
-            const calculateCentroid = (face) => {
-                const n = face.length;
-                let centroid = [0, 0];
-                face.forEach((vertexIndex) => {
-                    centroid[0] += VC[vertexIndex][0];
-                    centroid[1] += VC[vertexIndex][1];
-                });
-                return centroid.map(coord => coord / n);
-            };
-        
-            // Helper: Determine adjacent faces
-            const areFacesAdjacent = (face1, face2) => {
-                // Check if faces share at least one vertex
-                return face1.some(vertex => face2.includes(vertex));
-            };
-        
             // Draw arrows
             const drawArrows = () => {
-                FV.forEach((face1, index1) => {
-                    const centroid1 = calculateCentroid(face1);
-                    const [x1, y1] = centroid1.map(coord => coord * adjustedScale);
-        
-                    FV.forEach((face2, index2) => {
-                        if (index1 >= index2) return; // Arrow only from lower index to higher index
-                        if (!areFacesAdjacent(face1, face2)) return; // Skip non-adjacent faces
-        
-                        const centroid2 = calculateCentroid(face2);
-                        const [x2, y2] = centroid2.map(coord => coord * adjustedScale);
-        
-                        const line = document.createElementNS(svgNamespace, 'line');
-                        line.setAttribute('x1', x1);
-                        line.setAttribute('y1', y1);
-                        line.setAttribute('x2', x2);
-                        line.setAttribute('y2', y2);
-                        line.setAttribute('stroke', 'black');
-                        line.setAttribute('stroke-width', '1');
-                        line.setAttribute('marker-end', 'url(#arrow)');
-                        svg.appendChild(line);
-                    });
-                });
+                // `edgeFaceAdjacency` provides pairs of adjacent faces
+                for (const af of edgeFaceAdjacency.values()) {
+                    const [f1, f2] = af;
+            
+                    // Skip if either face is undefined
+                    if (f1 == null || f2 == null) continue;
+            
+                    // Collect vertex coordinates for each face
+                    const f1vc = [];
+                    FV[f1].forEach((v) => f1vc.push(VC[v]));
+                    const f2vc = [];
+                    FV[f2].forEach((v) => f2vc.push(VC[v]));
+            
+                    // Calculate centroids for each face
+                    const centroid1 = M.centroid(f1vc);
+                    const centroid2 = M.centroid(f2vc);
+            
+                    // Scale the coordinates
+                    const [x1, y1] = centroid1.map((coord) => coord * adjustedScale);
+                    const [x2, y2] = centroid2.map((coord) => coord * adjustedScale);
+            
+                    // Create a line connecting the centroids
+                    const line = document.createElementNS(svgNameSpace, 'line');
+                    line.setAttribute('x1', x1);
+                    line.setAttribute('y1', y1);
+                    line.setAttribute('x2', x2);
+                    line.setAttribute('y2', y2);
+                    line.setAttribute('stroke', 'green');
+                    line.setAttribute('stroke-width', '1');
+                    line.setAttribute('marker-end', 'url(#arrow)');
+                    svg.appendChild(line);
+                }
             };
+            
         
-            // Call the drawArrows function
-            // drawArrows();
+            // // Call the drawArrows function
         
             // Append the SVG element to the container
-            container.appendChild(svg);
+            if (folded == "unfolded"){
+                container1.appendChild(svg);
+                drawArrows()
+            } else if (folded == 'folded') {
+                container2.appendChild(svg)
+            }
+            
         };
 
         const submit = document.getElementById("submit");
         submit.addEventListener("click", displayOuterEdgeNodes);
-        submit.addEventListener("click", drawSVG)
+        submit.addEventListener("click", () => drawSVG("unfolded"))
+        submit.addEventListener("click", () => drawSVG("folded"))    
+        
     };
     
     fr.readAsText(event.target.files[0]); // Use event.target for file input reference
@@ -249,7 +271,6 @@ const findLeftRightFO = (FV, FO) => {
     //     }
     // }
     // console.log(localFaceOrder)
-
     return edgeFaceAdjacency;    
 };
 
