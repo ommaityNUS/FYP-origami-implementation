@@ -11,8 +11,9 @@ const uploadFile = (event) => {
 
     fr.onload = function () {
         const FOLD = JSON.parse(fr.result);
+        let edgeFaceAdjacency = ''
 
-        const displayOuterEdgeNodes = () => {
+        const displayOuterEdgeNodes = (FOLD) => {
             const faces_vertices = FOLD["faces_vertices"];
             const edges_vertices = FOLD["edges_vertices"];
             const edges_assignment = FOLD["edges_assignment"];
@@ -36,21 +37,52 @@ const uploadFile = (event) => {
             document.getElementById('globalFO').textContent = globalFO
         }
 
-        const drawSVG = (folded) => {
+        const drawSVG = (folded, FOLD, edgeFaceAdjacency) => {
+            
+            if (document.getElementById('container2')) {
+                document.getElementById('container2').remove()
+                document.getElementById('container1').remove()
+            } 
+
             let VC = FOLD["vertices_coords"]; // Vertex coordinates
             let EV = FOLD["edges_vertices"]; // Edge definitions
             let FV = FOLD["faces_vertices"]; // Replace with your actual logic to get faces
-            let FO = FOLD["faceOrders"]
+            let FO = FOLD["faceOrders"];
             let EA = FOLD["edges_assignment"];
-            const scale = 500
-            const adjustedScale = 490
+            let FD = '' // face direction
+            
+            const svgSize = 500;
+            const padding = 20;
+            const effectiveSize = svgSize - (2 * padding);
             const svgNameSpace = 'http://www.w3.org/2000/svg';
-            let edgeFaceAdjacency = ''
 
             if (folded == "unfolded") {
                 VC = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[0]; // Vertex coordinates
                 edgeFaceAdjacency = findLeftRightFO(FV);
+                FD = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[1];
+                console.log(FD)
             }
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+            VC.forEach(([x, y]) => {
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+            });
+
+            // Calculate scaling factor to fit the drawing
+            const width = maxX - minX;
+            const height = maxY - minY;
+            const scale = Math.min(effectiveSize / width, effectiveSize / height);
+
+            const transformCoord = (coord, min, max) => {
+                const centered = coord - min;
+                const scaled = centered * scale;
+                const offset = padding + (effectiveSize - (max - min) * scale) / 2;
+                return scaled + offset;
+            };
 
             // Create container and SVG element
             let container1 = document.getElementById('container1');
@@ -68,42 +100,46 @@ const uploadFile = (event) => {
             }
             
             const svg = document.createElementNS(svgNameSpace, 'svg');
-            svg.setAttribute('width', '500');
-            svg.setAttribute('height', '500');
-            svg.setAttribute('viewBox', '-10 -10 520 520');
+            svg.setAttribute('width', svgSize);
+            svg.setAttribute('height', svgSize);
+            svg.setAttribute('viewBox', `0 0 ${svgSize} ${svgSize}`);
             svg.setAttribute('style', 'border: none');
-        
+                
             // Draw vertices
             VC.forEach((vc, i) => {
                 const [x, y] = vc;
+                const transformedX = transformCoord(x, minX, maxX);
+                const transformedY = transformCoord(y, minY, maxY);
                 const circle = document.createElementNS(svgNameSpace, 'circle');
                 circle.setAttribute('id', `vertex_${i}`);
-                circle.setAttribute('cx', x * adjustedScale);
-                circle.setAttribute('cy', y * adjustedScale);
+                circle.setAttribute('cx', transformedX);
+                circle.setAttribute('cy', transformedY);
                 circle.setAttribute('r', '2');
                 circle.setAttribute('fill', 'black');
                 svg.appendChild(circle);
             });
         
             // Draw edges
-            const colors = new Map();
-            colors.set('M', 'red')
-            colors.set('V', 'blue')
-            colors.set('B', 'grey')
+            const colors = new Map([
+                ['M', 'red'],
+                ['V', 'blue'],
+                ['B', 'grey']
+            ]);
             EV.forEach((ev, index) => {
                 let [ev1, ev2] = ev;
                 let [x1, y1] = VC[ev1];
                 let [x2, y2] = VC[ev2];
-                x1 = x1 * adjustedScale;
-                y1 = y1 * adjustedScale;
-                x2 = x2 * adjustedScale;
-                y2 = y2 * adjustedScale;
+
+                const transformedX1 = transformCoord(x1, minX, maxX);
+                const transformedY1 = transformCoord(y1, minY, maxY);
+                const transformedX2 = transformCoord(x2, minX, maxX);
+                const transformedY2 = transformCoord(y2, minY, maxY);
         
                 const line = document.createElementNS(svgNameSpace, 'line');
-                line.setAttribute('x1', x1);
-                line.setAttribute('y1', y1);
-                line.setAttribute('x2', x2);
-                line.setAttribute('y2', y2);
+                line.setAttribute('x1', transformedX1);
+                line.setAttribute('y1', transformedY1);
+                line.setAttribute('x2', transformedX2);
+                line.setAttribute('y2', transformedY2);
                 if (folded == "unfolded") {
                     line.setAttribute('stroke', colors.get(EA[index]));
                 } else {
@@ -130,48 +166,76 @@ const uploadFile = (event) => {
             svg.appendChild(marker);
         
             // Draw arrows
-            const drawArrows = () => {
-                // `edgeFaceAdjacency` provides pairs of adjacent faces
+            const drawArrows = (edgeFaceAdjacency, FD) => {
                 for (const af of edgeFaceAdjacency.values()) {
                     const [f1, f2] = af;
-            
-                    // Skip if either face is undefined
                     if (f1 == null || f2 == null) continue;
-            
-                    // Collect vertex coordinates for each face
-                    const f1vc = [];
-                    FV[f1].forEach((v) => f1vc.push(VC[v]));
-                    const f2vc = [];
-                    FV[f2].forEach((v) => f2vc.push(VC[v]));
-            
-                    // Calculate centroids for each face
-                    const centroid1 = M.centroid(f1vc);
-                    const centroid2 = M.centroid(f2vc);
-            
+
+                    const f1Orientation = FD[f1];
+                    const f2Orientation = FD[f2];
+
+                    let startFace, endFace;
+                    if (f1Orientation === false && f2Orientation === true) {
+                        startFace = f1;
+                        endFace = f2;
+                    } else if (f1Orientation === true && f2Orientation === false) {
+                        startFace = f2;
+                        endFace = f1;
+                    } else {
+                        continue; // Skip if orientations are the same
+                    }
+        
+                    // Calculate centroids as before
+                    // const f1vc = FV[f1].map(v => VC[v]);
+                    // const f2vc = FV[f2].map(v => VC[v]);
+        
+                    // const centroid1 = M.centroid(f1vc);
+                    // const centroid2 = M.centroid(f2vc);
+
+                    // Calculate centroids
+                    const startVerts = FV[startFace].map(v => VC[v]);
+                    const endVerts = FV[endFace].map(v => VC[v]);
+                    const startCentroid = M.centroid(startVerts);
+                    const endCentroid = M.centroid(endVerts);
+        
                     // Scale the coordinates
-                    const [x1, y1] = centroid1.map((coord) => coord * adjustedScale);
-                    const [x2, y2] = centroid2.map((coord) => coord * adjustedScale);
-            
-                    // Create a line connecting the centroids
+                    const x1 = transformCoord(startCentroid[0], minX, maxX);
+                    const y1 = transformCoord(startCentroid[1], minY, maxY);
+                    const x2 = transformCoord(endCentroid[0], minX, maxX);
+                    const y2 = transformCoord(endCentroid[1], minY, maxY);
+        
+                    // Calculate the direction vector
+                    const dx = x2 - x1;
+                    const dy = y2 - y1;
+                    
+                    // Calculate the length of the vector
+                    const length = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // Normalize the direction vector
+                    const [nx, ny] = [dx / length, dy / length];
+                    
+                    // Calculate the end point that's shorter
+                    const shortenAmount = 20; // Number of pixels to shorten by
+                    const endX = x2 - (nx * shortenAmount);
+                    const endY = y2 - (ny * shortenAmount);
+        
+                    // Draw the arrow
                     const line = document.createElementNS(svgNameSpace, 'line');
                     line.setAttribute('x1', x1);
                     line.setAttribute('y1', y1);
-                    line.setAttribute('x2', x2);
-                    line.setAttribute('y2', y2);
+                    line.setAttribute('x2', endX);
+                    line.setAttribute('y2', endY);
                     line.setAttribute('stroke', 'green');
                     line.setAttribute('stroke-width', '1');
                     line.setAttribute('marker-end', 'url(#arrow)');
                     svg.appendChild(line);
                 }
             };
-            
-        
-            // // Call the drawArrows function
         
             // Append the SVG element to the container
             if (folded == "unfolded"){
                 container1.appendChild(svg);
-                drawArrows()
+                drawArrows(edgeFaceAdjacency, FD)
             } else if (folded == 'folded') {
                 container2.appendChild(svg)
             }
@@ -179,10 +243,10 @@ const uploadFile = (event) => {
         };
 
         const submit = document.getElementById("submit");
-        submit.addEventListener("click", displayOuterEdgeNodes);
-        submit.addEventListener("click", () => drawSVG("unfolded"))
-        submit.addEventListener("click", () => drawSVG("folded"))    
+        submit.addEventListener("click", () => displayOuterEdgeNodes(FOLD));
         
+        submit.addEventListener("click", () => drawSVG("unfolded", FOLD, edgeFaceAdjacency))
+        submit.addEventListener("click", () => drawSVG("folded", FOLD, edgeFaceAdjacency)) 
     };
     
     fr.readAsText(event.target.files[0]); // Use event.target for file input reference
