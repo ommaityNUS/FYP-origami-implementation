@@ -18,8 +18,14 @@ const uploadFile = (event) => {
             const edges_vertices = FOLD["edges_vertices"];
             const edges_assignment = FOLD["edges_assignment"];
             const vertices_coords = FOLD["vertices_coords"]
-            const faceOrders = X.V_FV_EV_EA_2_Vf_Ff(vertices_coords, faces_vertices, edges_vertices, edges_assignment)[1]
-            const foldedStateV = X.V_FV_EV_EA_2_Vf_Ff(vertices_coords, faces_vertices, edges_vertices, edges_assignment)[0]
+            const faceDirections = X.V_FV_EV_EA_2_Vf_Ff(vertices_coords, faces_vertices, edges_vertices, edges_assignment)[1]
+            
+            
+            let faceOrders = FOLD["faceOrders"];
+            if (FOLD["faceOrders"] == undefined) {
+                faceOrders = determineFaceOrders(FOLD);
+            }
+            // const foldedStateV = X.V_FV_EV_EA_2_Vf_Ff(vertices_coords, faces_vertices, edges_vertices, edges_assignment)[0]
      
             const outerEdgeNodes = findOuterEdgeNodes(faces_vertices);
             document.getElementById('outerEdgeNodes').textContent = "Outer edge nodes are: " + Array.from(outerEdgeNodes);
@@ -31,7 +37,7 @@ const uploadFile = (event) => {
             document.getElementById('leftOrRight').textContent = leftOrRight;
 
             let globalFO = "face -> [up?]" 
-            faceOrders.forEach((value, key) => {
+            faceDirections.forEach((value, key) => {
                 globalFO += `\n${key} -> [${value}]`;
             })
             document.getElementById('globalFO').textContent = globalFO
@@ -43,11 +49,13 @@ const uploadFile = (event) => {
                 document.getElementById('container2').remove()
                 document.getElementById('container1').remove()
             } 
-
-            let VC = FOLD["vertices_coords"]; // Vertex coordinates
-            let EV = FOLD["edges_vertices"]; // Edge definitions
-            let FV = FOLD["faces_vertices"]; // Replace with your actual logic to get faces
+            let VC = FOLD["vertices_coords"]; 
+            let EV = FOLD["edges_vertices"]; 
+            let FV = FOLD["faces_vertices"]; 
             let FO = FOLD["faceOrders"];
+            if (FOLD["faceOrders"] == undefined) {
+                FO = determineFaceOrders(FOLD);
+            }
             let EA = FOLD["edges_assignment"];
             let FD = '' // face direction
             
@@ -56,12 +64,19 @@ const uploadFile = (event) => {
             const effectiveSize = svgSize - (2 * padding);
             const svgNameSpace = 'http://www.w3.org/2000/svg';
 
+            // logic for if you want to display an unfolded state
             if (folded == "unfolded") {
-                VC = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[0]; // Vertex coordinates
-                edgeFaceAdjacency = findLeftRightFO(FV);
+                if (isFoldedState(FOLD) == true) {
+                    console.log("this file is not folded")
+                    VC = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[0]; 
+                } else if (isFoldedState(FOLD) == false) {
+                    console.log("this file is already unfolded")
+                }
+                edgeFaceAdjacency = findLeftRightFO(FV, FO);
                 FD = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[1];
-                console.log(FD)
             }
+
+            
 
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
 
@@ -167,58 +182,51 @@ const uploadFile = (event) => {
         
             // Draw arrows
             const drawArrows = (edgeFaceAdjacency, FD) => {
+                const fixedOffset = 10; // Fixed number of pixels to shorten by
+            
                 for (const af of edgeFaceAdjacency.values()) {
-                    const [f1, f2] = af;
-                    if (f1 == null || f2 == null) continue;
-
-                    const f1Orientation = FD[f1];
-                    const f2Orientation = FD[f2];
-
+                    const [f1, f2, orientation] = af;
+                    if (f1 == null || f2 == null || orientation == null) continue;
+            
+                    const f2Orientation = FD[f2]; // true is up, false is down
                     let startFace, endFace;
-                    if (f1Orientation === false && f2Orientation === true) {
-                        startFace = f1;
-                        endFace = f2;
-                    } else if (f1Orientation === true && f2Orientation === false) {
-                        startFace = f2;
-                        endFace = f1;
+            
+                    // Determine start and end faces based on orientation
+                    if (f2Orientation === false) {
+                        startFace = (orientation === 1) ? f1 : f2;
+                        endFace = (orientation === 1) ? f2 : f1;
                     } else {
-                        continue; // Skip if orientations are the same
+                        startFace = (orientation === 1) ? f2 : f1;
+                        endFace = (orientation === 1) ? f1 : f2;
                     }
-        
-                    // Calculate centroids as before
-                    // const f1vc = FV[f1].map(v => VC[v]);
-                    // const f2vc = FV[f2].map(v => VC[v]);
-        
-                    // const centroid1 = M.centroid(f1vc);
-                    // const centroid2 = M.centroid(f2vc);
-
-                    // Calculate centroids
+            
+                    // Compute centroids
                     const startVerts = FV[startFace].map(v => VC[v]);
                     const endVerts = FV[endFace].map(v => VC[v]);
                     const startCentroid = M.centroid(startVerts);
                     const endCentroid = M.centroid(endVerts);
-        
-                    // Scale the coordinates
+            
+                    // Transform coordinates
                     const x1 = transformCoord(startCentroid[0], minX, maxX);
                     const y1 = transformCoord(startCentroid[1], minY, maxY);
                     const x2 = transformCoord(endCentroid[0], minX, maxX);
                     const y2 = transformCoord(endCentroid[1], minY, maxY);
-        
-                    // Calculate the direction vector
+            
+                    // Compute direction vector
                     const dx = x2 - x1;
                     const dy = y2 - y1;
-                    
-                    // Calculate the length of the vector
                     const length = Math.sqrt(dx * dx + dy * dy);
-                    
-                    // Normalize the direction vector
-                    const [nx, ny] = [dx / length, dy / length];
-                    
-                    // Calculate the end point that's shorter
-                    const shortenAmount = 20; // Number of pixels to shorten by
-                    const endX = x2 - (nx * shortenAmount);
-                    const endY = y2 - (ny * shortenAmount);
-        
+            
+                    if (length < fixedOffset) continue; // Prevent arrows from disappearing if too short
+            
+                    // Normalize vector
+                    const nx = dx / length;
+                    const ny = dy / length;
+            
+                    // Move endpoint back by a fixed amount
+                    const endX = x2 - nx * fixedOffset;
+                    const endY = y2 - ny * fixedOffset;
+            
                     // Draw the arrow
                     const line = document.createElementNS(svgNameSpace, 'line');
                     line.setAttribute('x1', x1);
@@ -231,6 +239,7 @@ const uploadFile = (event) => {
                     svg.appendChild(line);
                 }
             };
+            
         
             // Append the SVG element to the container
             if (folded == "unfolded"){
@@ -247,6 +256,7 @@ const uploadFile = (event) => {
         
         submit.addEventListener("click", () => drawSVG("unfolded", FOLD, edgeFaceAdjacency))
         submit.addEventListener("click", () => drawSVG("folded", FOLD, edgeFaceAdjacency)) 
+        submit.addEventListener("click", () => determineFaceOrders(FOLD)) 
     };
     
     fr.readAsText(event.target.files[0]); // Use event.target for file input reference
@@ -288,14 +298,15 @@ const findOuterEdgeNodes = (FV) => {
 
 //seperate everything into functions within functions
 const findLeftRightFO = (FV, FO) => {
-    const localFaceOrder = new Map()
+    const localFaceOrder = new Map();
     const edgeFaceAdjacency = new Map();
+    
+    // Build initial edge-face adjacency
     FV.forEach((face, i) => {
         face.forEach((current, j) => {
             const next = face[(j + 1) % face.length];
             const edgeKey = [current, next].toString();
             const reverseEdgeKey = [next, current].toString();
-
             if (edgeFaceAdjacency.has(reverseEdgeKey)) {
                 edgeFaceAdjacency.get(reverseEdgeKey)[0] = i;
             } else {
@@ -304,37 +315,73 @@ const findLeftRightFO = (FV, FO) => {
         });
     });
 
-    // // Build a lookup map for FO
-    // const FOMap = new Map();
-    // FO.forEach(fo => {
-    //     const key = [fo[0], fo[1]].toString();
-    //     FOMap.set(key, fo[2]);
-    //     const reverseKey = [fo[1], fo[0]].toString();
-    //     FOMap.set(reverseKey, -fo[2]);
-    // });
+    // For each pair of adjacent faces, check if they exist in FO
+    for (const [edge, faces] of edgeFaceAdjacency.entries()) {
+        const [face1, face2] = faces;
+        if (face1 === undefined || face2 === undefined) continue;
 
-    // for (const f of edgeFaceAdjacency.values()) {
-    //     const edgeKey = [f[0], f[1]].toString();
-    //     if (FOMap.has(edgeKey)) {
-    //         f.push(FOMap.get(edgeKey));
-    //     }
-    // }
+        // Check each FO entry
+        for (const [f1, f2, orientation] of FO) {
+            // If we find these faces in FO (in either order)
+            if ((face1 === f1 && face2 === f2) || (face1 === f2 && face2 === f1)) {
+                // Replace the faces array with the ordered version from FO
+                edgeFaceAdjacency.set(edge, [f1, f2, orientation]);
+                break;
+            }
+        }
+    }
 
-    // for (const f of edgeFaceAdjacency.values()) {
-    //     let init = 1
-    //     for (const a of f.slice(0,2)) {
-    //         if (!localFaceOrder.has(a)) {
-    //             if (a || a == 0) {
-    //                 localFaceOrder.set(a, init)
-    //                 if (f.length == 3) {
-    //                     init = init*-1
-    //                 }
-    //             }
-    //         } else if (localFaceOrder.has(a)) {
-    //         }
-    //     }
-    // }
-    // console.log(localFaceOrder)
-    return edgeFaceAdjacency;    
+    return edgeFaceAdjacency;
 };
+
+function determineFaceOrders(FOLD) {
+    let faces_vertices = FOLD["faces_vertices"];
+    let edges_vertices = FOLD["edges_vertices"];
+    let edges_assignment = FOLD["edges_assignment"];
+    let faceOrders = [];
+
+    // Step 1: Build adjacency map (which faces share an edge)
+    let edgeToFaces = new Map();
+    faces_vertices.forEach((face, fIndex) => {
+        for (let i = 0; i < face.length; i++) {
+            let edge = [face[i], face[(i + 1) % face.length]].sort((a, b) => a - b).join(',');
+            if (!edgeToFaces.has(edge)) edgeToFaces.set(edge, []);
+            edgeToFaces.get(edge).push(fIndex);
+        }
+    });
+
+    // Step 2: Assign relative stacking orders
+    edges_vertices.forEach(([v1, v2], eIndex) => {
+        let edgeKey = [v1, v2].sort((a, b) => a - b).join(',');
+        let adjacentFaces = edgeToFaces.get(edgeKey) || [];
+
+        if (adjacentFaces.length === 2) {
+            let [f, g] = adjacentFaces;
+            let assignment = edges_assignment[eIndex];
+            let s = 0; // Default unknown stacking order
+
+            if (assignment === 'M') {
+                s = -1;  // f is above g
+            } else if (assignment === 'V') {
+                s = 1; // f is below g
+            }
+
+            faceOrders.push([f, g, s]);
+        }
+    });
+
+    return faceOrders;
+}
+
+function isFoldedState(FOLD) {
+    // Check if faceOrders exist
+    if (FOLD["faceOrders"] && FOLD["faceOrders"].length > 0) {
+        return true; // Explicit stacking order exists
+    }
+
+    if (FOLD["vertices_coords"] && FOLD["vertices_coords"].some(v => v[0] === 0 && v[1] === 0)) {
+        return false; // Presence of [0,0] means it's not folded
+    }
+    return false;
+}
 
