@@ -12,6 +12,7 @@ const uploadFile = (event) => {
     fr.onload = function () {
         const FOLD = JSON.parse(fr.result);
         let edgeFaceAdjacency = ''
+        const arrowset = []
 
         const displayOuterEdgeNodes = (FOLD) => {
             const FV = FOLD["faces_vertices"];
@@ -21,18 +22,18 @@ const uploadFile = (event) => {
             }
             const VC = FOLD["vertices_coords"]
             const FO = FOLD["faceOrders"];
-            edgeFaceAdjacency = findLeftRightFO(FV, FO);
+            edgeFaceAdjacency = findAdjacentFaces(FV, FO);
             const EA = createEdgesAssignment(edgeFaceAdjacency, EV);
             const FD = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[1]   
      
             const outerEdgeNodes = findOuterEdgeNodes(FV);
             document.getElementById('outerEdgeNodes').textContent = "Outer edge nodes are: " + Array.from(outerEdgeNodes);
             
-            let leftOrRight = "edge -> [leftFace, rightFace]";
-            findLeftRightFO(FV, FO).forEach((value, key) => {
-                leftOrRight += `\n${key} -> [${value.join(", ")}]`;
+            let adjacentFaces = "edge -> [f1, f2, order]";
+            findAdjacentFaces(FV, FO).forEach((value, key) => {
+                adjacentFaces += `\n${key} -> [${value.join(", ")}]`;
             });
-            document.getElementById('leftOrRight').textContent = leftOrRight;
+            document.getElementById('adjacentFaces').textContent = adjacentFaces;
 
             let globalFO = "face -> [up?]" 
             FD.forEach((value, key) => {
@@ -54,7 +55,7 @@ const uploadFile = (event) => {
                 EV = constructEdgesVertices(FV);
             }
             let FO = FOLD["faceOrders"];
-            edgeFaceAdjacency = findLeftRightFO(FV, FO);
+            edgeFaceAdjacency = findAdjacentFaces(FV, FO);
             let EA = createEdgesAssignment(edgeFaceAdjacency, EV); // edge assignment
             let FD = '' // face direction
             
@@ -66,7 +67,7 @@ const uploadFile = (event) => {
             // logic for if you want to display an unfolded state
             if (folded == "unfolded") {
                 VC = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[0]; 
-                edgeFaceAdjacency = findLeftRightFO(FV, FO);
+                edgeFaceAdjacency = findAdjacentFaces(FV, FO);
                 FD = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[1];
             }
 
@@ -112,22 +113,82 @@ const uploadFile = (event) => {
             svg.setAttribute('viewBox', `0 0 ${svgSize} ${svgSize}`);
             svg.setAttribute('style', 'border: none');
                 
-            // Draw vertices
+            let highlightedCircle = null; // Keep track of the currently highlighted circle
+
+            const handleVertexClick = (event) => {
+                const vertexId = event.target.dataset.vertexId; // Get the vertex ID from the invisible circle
+                if (!vertexId) return;
+            
+                // Reset all highlights completely
+                const existingHighlightedCircles = svg.querySelectorAll('[id^="highlight_"]');
+                existingHighlightedCircles.forEach(circle => {
+                    circle.setAttribute('fill', 'transparent');
+                });
+            
+                // Highlight the newly selected circle
+                const newHighlightedCircle = document.getElementById(`highlight_${vertexId}`);
+                newHighlightedCircle.setAttribute('fill', '#ffb43d'); // Yellow color
+            
+                // Remove ALL highlighted edge lines (without relying on a specific attribute)
+                const highlightedEdges = svg.querySelectorAll('line[stroke="pink"], line[stroke="orange"]');
+                highlightedEdges.forEach(line => line.remove());
+            
+                // Call the search function and capture visited edges
+                const edgeLeftOrRight = setLeftRightOrderFO(FOLD["faces_vertices"], arrowset);
+                const visitedEdges = dfsLeftToRightEdges(vertexId, edgeLeftOrRight, findUnfoldedVertices(edgeFaceAdjacency));
+            
+                // Highlight visited edges if in unfolded state
+                if (folded === "unfolded") {
+                    highlightVisitedEdges(visitedEdges, EV, VC, transformCoord, minX, maxX, minY, maxY, svg);
+                }
+            };
+
+            // Modify the vertex drawing loop to add event listeners
             VC.forEach((vc, i) => {
                 const [x, y] = vc;
                 const transformedX = transformCoord(x, minX, maxX);
                 const transformedY = transformCoord(y, minY, maxY);
+
+                // Create the actual visible vertex circle
                 const circle = document.createElementNS(svgNameSpace, 'circle');
                 circle.setAttribute('id', `vertex_${i}`);
                 circle.setAttribute('cx', transformedX);
                 circle.setAttribute('cy', transformedY);
-                circle.setAttribute('r', '2');
+                circle.setAttribute('r', '2'); // Small visible size
                 circle.setAttribute('fill', 'black');
-                svg.appendChild(circle);
-            });
-        
 
-            // const innerEdges = classifyEdges(edgeFaceAdjacency, EV)[0];
+                // Only draw the invisible highlight circle if "unfolded"
+                if (folded === "unfolded") {
+                    const highlightCircle = document.createElementNS(svgNameSpace, 'circle');
+                    highlightCircle.setAttribute('id', `highlight_${i}`);
+                    highlightCircle.setAttribute('cx', transformedX);
+                    highlightCircle.setAttribute('cy', transformedY);
+                    highlightCircle.setAttribute('r', '12.5'); // Bigger circle around the vertex
+                    highlightCircle.setAttribute('fill', 'transparent'); // Start as invisible
+                    highlightCircle.setAttribute('opacity', '0.5'); // Slight transparency
+                    highlightCircle.style.cursor = 'pointer'; // Indicate it's clickable
+                    highlightCircle.dataset.vertexId = i; // Store ID in dataset for easy retrieval
+                    highlightCircle.addEventListener('click', handleVertexClick); // Attach event listener
+
+                    // Append highlight circle before the visible vertex circle
+                    svg.appendChild(highlightCircle);
+                }
+
+                // Append the visible vertex circle
+                svg.appendChild(circle);
+
+                // Only add text labels if "unfolded"
+                if (folded === "unfolded") {
+                    const text = document.createElementNS(svgNameSpace, 'text');
+                    text.setAttribute('x', transformedX + 5);
+                    text.setAttribute('y', transformedY - 5);
+                    text.setAttribute('font-size', '10');
+                    text.setAttribute('fill', 'black');
+                    text.textContent = i;
+                    svg.appendChild(text);
+                }
+            });
+
             // Draw edges
             const colors = new Map([
                 ['M', 'red'],
@@ -186,6 +247,7 @@ const uploadFile = (event) => {
                     
                     // Use the helper function to determine start and end faces
                     const { startFace, endFace } = getArrowDirection(f1, f2, orientation, f2Orientation);
+                    arrowset.push([startFace, endFace])
             
                     // Compute centroids
                     const startVerts = FV[startFace].map(v => VC[v]);
@@ -251,8 +313,44 @@ const uploadFile = (event) => {
                 }
             };
             
+            // Add this function just before appending the SVG
+            const highlightVisitedEdges = (visitedEdges, EV, VC, transformCoord, minX, maxX, minY, maxY, svg) => {
+                visitedEdges.forEach((edgeData, edgeKey) => {
+                    // Parse the edge key back to vertex indices
+                    const [v1, v2] = edgeKey.split(",").map(Number);
+                    
+                    // Find the corresponding edge in EV
+                    const edgeIndex = EV.findIndex(edge => 
+                        (edge[0] === v1 && edge[1] === v2) || 
+                        (edge[0] === v2 && edge[1] === v1)
+                    );
+                    
+                    if (edgeIndex !== -1) {
+                        // Get vertex coordinates
+                        let [x1, y1] = VC[v1];
+                        let [x2, y2] = VC[v2];
             
-            // Append the SVG element to the container
+                        const transformedX1 = transformCoord(x1, minX, maxX);
+                        const transformedY1 = transformCoord(y1, minY, maxY);
+                        const transformedX2 = transformCoord(x2, minX, maxX);
+                        const transformedY2 = transformCoord(y2, minY, maxY);
+            
+                        // Determine color based on edge direction
+                        const lineColor = edgeData[2] === 1 ? 'pink' : 'orange';
+            
+                        const line = document.createElementNS(svgNameSpace, 'line');
+                        line.setAttribute('x1', transformedX1);
+                        line.setAttribute('y1', transformedY1);
+                        line.setAttribute('x2', transformedX2);
+                        line.setAttribute('y2', transformedY2);
+                        line.setAttribute('stroke', lineColor);
+                        line.setAttribute('stroke-width', '10'); // Make it thicker to stand out
+                        line.setAttribute('opacity', '0.8'); // Slightly transparent
+                        svg.appendChild(line);
+                    }
+                });
+            };
+
             if (folded == "unfolded"){
                 container1.appendChild(svg);
                 drawArrows(edgeFaceAdjacency, FD)
@@ -272,7 +370,8 @@ const uploadFile = (event) => {
         displayOuterEdgeNodes(FOLD);
         drawSVG("unfolded", FOLD, edgeFaceAdjacency); 
         drawSVG("folded", FOLD, edgeFaceAdjacency);
-        classifyEdges(edgeFaceAdjacency);
+        findUnfoldedVertices(edgeFaceAdjacency);
+        setLeftRightOrderFO(FOLD["faces_vertices"], arrowset);
     };
     
     fr.readAsText(event.target.files[0]); // Use event.target for file input reference
@@ -313,7 +412,7 @@ const findOuterEdgeNodes = (FV) => {
 }
 
 //seperate everything into functions within functions
-const findLeftRightFO = (FV, FO) => {
+const findAdjacentFaces = (FV, FO) => {
     const edgeFaceAdjacency = new Map();
     
     // Build initial edge-face adjacency
@@ -394,7 +493,6 @@ const getArrowDirection = (f1, f2, orientation, f2Orientation) => {
         startFace = (orientation === 1) ? f2 : f1;
         endFace = (orientation === 1) ? f1 : f2;
     }
-
     return { startFace, endFace };
 };
 
@@ -429,30 +527,171 @@ const constructEdgesVertices = (faces_vertices) => {
     return edges_vertices;
 };
 
-const classifyEdges = (edgeFaceAdjacency) => {
+const findUnfoldedVertices = (edgeFaceAdjacency) => {
     const innerEdges = new Set();
     const outerEdges = new Set();
+    const unfoldedVertices = new Set();
     
     for (const [edge, faceData] of edgeFaceAdjacency.entries()) {
         const [face1, face2, foldOrder] = faceData;
-        // console.log("face1 is "+ face1)
         
         if (face1 !== undefined && face2 !== undefined) {
             // Edge has two adjacent faces
             if (foldOrder === undefined) {
                 // If no fold order, it's an unfolded inner edge
                 innerEdges.add(edge);
+                edge.split(',').map(num => Number(num.trim())).forEach(num => unfoldedVertices.add(num));
             }
         } else {
             // Edge has only one face, it's an outer edge
             outerEdges.add(edge);
+            edge.split(',').map(num => Number(num.trim())).forEach(num => unfoldedVertices.add(num));
         }
+        
     }
     
-    console.log("inner edges are ", innerEdges)
-    console.log("outer edges are ",  outerEdges)
-    return {
-        innerEdges: Array.from(innerEdges),
-        outerEdges: Array.from(outerEdges)
-    };
+    return unfoldedVertices
 };
+
+const setLeftRightOrderFO = (FV, arrowset) => {
+    const edgeLeftOrRight = new Map();
+    
+    // Build initial edge-face adjacency
+    FV.forEach((face, i) => {
+        face.forEach((current, j) => {
+            const next = face[(j + 1) % face.length];
+            const edgeKey = [current, next].toString();
+            const reverseEdgeKey = [next, current].toString();
+            if (edgeLeftOrRight.has(reverseEdgeKey)) {
+                edgeLeftOrRight.get(reverseEdgeKey)[0] = i;
+            } else {
+                edgeLeftOrRight.set(edgeKey, [undefined, i]); // Use undefined instead of empty slot
+            }
+        });
+    });
+    
+    // Check edges in arrowset
+    edgeLeftOrRight.forEach((faces, edgeKey) => {
+        if (faces.length === 2 && faces[0] !== undefined && faces[1] !== undefined) {
+            const [f1, f2] = faces;
+            if (arrowset.some(([a, b]) => a === f1 && b === f2)) {
+                edgeLeftOrRight.set(edgeKey, [...faces, 1]);
+            } else if (arrowset.some(([a, b]) => a === f2 && b === f1)) {
+                edgeLeftOrRight.set(edgeKey, [...faces, -1]);
+            }
+        }
+    });
+    
+    // Add reversed edges (handling empty slots correctly)
+    const reversedEntries = new Map();
+    edgeLeftOrRight.forEach((faces, edgeKey) => {
+        const [f1, f2, direction] = faces;
+        const reversedEdgeKey = edgeKey.split(",").reverse().toString();
+        const reversedDirection = direction === 1 ? -1 : direction === -1 ? 1 : undefined;
+        
+        // Create the reversed faces array
+        let reversedFaces;
+        
+        // Only add a direction if both f1 and f2 are defined
+        if (f1 === undefined) {
+            reversedFaces = [f2, undefined];
+        } else if (f2 === undefined) {
+            reversedFaces = [undefined, f1];
+        } else {
+            // Both faces are defined, so include direction if it exists
+            reversedFaces = direction ? [f2, f1, reversedDirection] : [f2, f1];
+        }
+        
+        reversedEntries.set(reversedEdgeKey, reversedFaces);
+    });
+    
+    // Merge the reversed entries into edgeLeftOrRight
+    reversedEntries.forEach((value, key) => {
+        edgeLeftOrRight.set(key, value);
+    });
+    
+    return edgeLeftOrRight;
+};
+
+const dfsLeftToRightEdges = (startVertex, edgeLeftOrRight, unfoldedVertices) => {
+    startVertex = Number(startVertex);
+    console.log("Edge left or right map:");
+    console.log(edgeLeftOrRight);
+    console.log("Starting DFS from vertex:", startVertex);
+    console.log("Unfolded vertices:", unfoldedVertices);
+   
+    const visitedEdges = new Map();
+    const visitedVertices = new Set();
+    const stack = [{ vertex: startVertex, direction: null }];
+   
+    while (stack.length > 0) {
+        const { vertex: currentVertex, direction: currentDirection } = stack.pop();
+       
+        // Skip if we've already processed this vertex
+        if (visitedVertices.has(currentVertex)) continue;
+       
+        console.log("Processing vertex:", currentVertex, "with direction:", currentDirection);
+        visitedVertices.add(currentVertex);
+       
+        let foundEdge = false; // Track if we find any traversable edge from currentVertex
+       
+        // Collect all potential next vertices first
+        const nextVertices = [];
+       
+        // Check all edges in the map
+        for (const [edgeKey, edgeData] of edgeLeftOrRight.entries()) {
+            const [v1, v2] = edgeKey.split(",").map(Number);
+           
+            // Only check edges starting from currentVertex
+            if (v1 === currentVertex) {
+                console.log(`Checking forward edge ${v1}->${v2}, data:`, edgeData);
+               
+                // Check if leftToRight order is defined
+                if (!Array.isArray(edgeData) || edgeData[2] === undefined) {
+                    console.log(`Skipping edge ${v1}->${v2} due to undefined leftToRight order`);
+                    continue;
+                }
+               
+                // If no current direction, use the edge's direction
+                // Otherwise, match the current direction
+                const matchesDirection = currentDirection === null || edgeData[2] === currentDirection;
+               
+                if (matchesDirection) {
+                    console.log(`Found ${edgeData[2] === 1 ? 'leftToRight' : 'rightToLeft'} forward edge from ${v1} to ${v2}`);
+                   
+                    // Add this edge to visited edges
+                    visitedEdges.set(edgeKey, edgeData);
+                   
+                    // If the destination vertex is NOT in unfolded vertices, add to next vertices
+                    if (!visitedVertices.has(v2) &&
+                        (!unfoldedVertices.has(v2) || currentVertex === startVertex)) {
+                        nextVertices.push({
+                            vertex: v2,
+                            // Persist the direction found in the first edge
+                            direction: currentDirection === null ? edgeData[2] : currentDirection
+                        });
+                        foundEdge = true;
+                    }
+                }
+            }
+        }
+       
+        // Add next vertices to stack in reverse order to maintain DFS order
+        for (const vertexInfo of nextVertices.reverse()) {
+            stack.push(vertexInfo);
+        }
+       
+        // Special handling for start vertex being in unfolded vertices
+        if (currentVertex === startVertex && unfoldedVertices.has(currentVertex) && !foundEdge) {
+            console.log(`Start vertex ${currentVertex} is in unfolded vertices with no valid edges.`);
+        }
+       
+        if (!foundEdge && currentVertex !== startVertex) {
+            console.log(`No valid edges found from vertex ${currentVertex}`);
+        }
+    }
+   
+    console.log("Visited edges:", visitedEdges);
+    return visitedEdges;
+};
+
