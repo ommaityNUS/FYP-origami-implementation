@@ -48,6 +48,8 @@ const uploadFile = (event) => {
                 document.getElementById('container2').remove()
                 document.getElementById('container1').remove()
             } 
+            const displayFacegraph = document.getElementById('faceGraph');
+            // const labelVertices = document.getElementById('labelVertices');
             let VC = FOLD["vertices_coords"]; 
             let EV = FOLD["edges_vertices"]; 
             let FV = FOLD["faces_vertices"]; 
@@ -58,6 +60,7 @@ const uploadFile = (event) => {
             edgeFaceAdjacency = findAdjacentFaces(FV, FO);
             let EA = createEdgesAssignment(edgeFaceAdjacency, EV); // edge assignment
             let FD = '' // face direction
+            let greenArrows = [];
             
             const svgSize = 500;
             const padding = 20;
@@ -143,52 +146,6 @@ const uploadFile = (event) => {
                 }
             };
 
-            // Modify the vertex drawing loop to add event listeners
-            VC.forEach((vc, i) => {
-                const [x, y] = vc;
-                const transformedX = transformCoord(x, minX, maxX);
-                const transformedY = transformCoord(y, minY, maxY);
-
-                // Create the actual visible vertex circle
-                const circle = document.createElementNS(svgNameSpace, 'circle');
-                circle.setAttribute('id', `vertex_${i}`);
-                circle.setAttribute('cx', transformedX);
-                circle.setAttribute('cy', transformedY);
-                circle.setAttribute('r', '2'); // Small visible size
-                circle.setAttribute('fill', 'black');
-
-                // Only draw the invisible highlight circle if "unfolded"
-                if (folded === "unfolded") {
-                    const highlightCircle = document.createElementNS(svgNameSpace, 'circle');
-                    highlightCircle.setAttribute('id', `highlight_${i}`);
-                    highlightCircle.setAttribute('cx', transformedX);
-                    highlightCircle.setAttribute('cy', transformedY);
-                    highlightCircle.setAttribute('r', '12.5'); // Bigger circle around the vertex
-                    highlightCircle.setAttribute('fill', 'transparent'); // Start as invisible
-                    highlightCircle.setAttribute('opacity', '0.5'); // Slight transparency
-                    highlightCircle.style.cursor = 'pointer'; // Indicate it's clickable
-                    highlightCircle.dataset.vertexId = i; // Store ID in dataset for easy retrieval
-                    highlightCircle.addEventListener('click', handleVertexClick); // Attach event listener
-
-                    // Append highlight circle before the visible vertex circle
-                    svg.appendChild(highlightCircle);
-                }
-
-                // Append the visible vertex circle
-                svg.appendChild(circle);
-
-                // Only add text labels if "unfolded"
-                if (folded === "unfolded") {
-                    const text = document.createElementNS(svgNameSpace, 'text');
-                    text.setAttribute('x', transformedX + 5);
-                    text.setAttribute('y', transformedY - 5);
-                    text.setAttribute('font-size', '10');
-                    text.setAttribute('fill', 'black');
-                    text.textContent = i;
-                    svg.appendChild(text);
-                }
-            });
-
             // Draw edges
             const colors = new Map([
                 ['M', 'red'],
@@ -215,10 +172,62 @@ const uploadFile = (event) => {
                 } else {
                     line.setAttribute('stroke', 'grey');
                 }
-                line.setAttribute('stroke-width', '1');
+                line.setAttribute('stroke-width', '0.5');
                 svg.appendChild(line);
             });
-        
+
+            // Modify the vertex drawing loop to add event listeners
+            VC.forEach((vc, i) => {
+                const [x, y] = vc;
+                const transformedX = transformCoord(x, minX, maxX);
+                const transformedY = transformCoord(y, minY, maxY);
+            
+                // Only create and append the highlight circle if "unfolded"
+                if (folded === "unfolded") {
+                    const highlightCircle = document.createElementNS(svgNameSpace, 'circle');
+                    highlightCircle.setAttribute('id', `highlight_${i}`);
+                    highlightCircle.setAttribute('cx', transformedX);
+                    highlightCircle.setAttribute('cy', transformedY);
+                    highlightCircle.setAttribute('r', '12.5'); // Bigger circle around the vertex
+                    highlightCircle.setAttribute('fill', 'transparent'); // Start as invisible
+                    highlightCircle.setAttribute('opacity', '0.5'); // Slight transparency
+                    highlightCircle.style.cursor = 'pointer'; // Indicate it's clickable
+                    highlightCircle.dataset.vertexId = i; // Store ID in dataset for easy retrieval
+                    
+                    // Add click event listener
+                    highlightCircle.addEventListener('click', handleVertexClick);
+                    
+                    // Add hover effects
+                    highlightCircle.addEventListener('mouseenter', (event) => {
+                        // Only change to grey if not already highlighted (not yellow)
+                        if (event.target.getAttribute('fill') !== '#ffb43d') {
+                            event.target.setAttribute('fill', 'grey');
+                        }
+                    });
+                    
+                    highlightCircle.addEventListener('mouseleave', (event) => {
+                        // Only change back to transparent if not highlighted (not yellow)
+                        if (event.target.getAttribute('fill') !== '#ffb43d') {
+                            event.target.setAttribute('fill', 'transparent');
+                        }
+                    });
+
+                    // Append highlight circle
+                    svg.appendChild(highlightCircle);
+                }
+            
+                // Only add text labels if "unfolded"
+                if (folded === "unfolded") {
+                    const text = document.createElementNS(svgNameSpace, 'text');
+                    text.setAttribute('x', transformedX + 5);
+                    text.setAttribute('y', transformedY - 5);
+                    text.setAttribute('font-size', '10');
+                    text.setAttribute('fill', 'black');
+                    text.textContent = i;
+                    svg.appendChild(text);
+                }
+            });
+
             // Add arrow marker
             const marker = document.createElementNS(svgNameSpace, 'marker');
             marker.setAttribute('id', 'arrow');
@@ -283,45 +292,47 @@ const uploadFile = (event) => {
                     line.setAttribute('x2', endX);
                     line.setAttribute('y2', endY);
                     line.setAttribute('stroke', 'green');
-                    line.setAttribute('stroke-width', '1');
+                    line.setAttribute('stroke-width', '0.6');
                     line.setAttribute('marker-end', 'url(#arrow)');
                     svg.appendChild(line);
-                }
-            };
-
-            const highlightOuterEdges = (edgeFaceAdjacency, EV, VC) => {
-                for (const [edgeIndex, adjacency] of Object.entries(edgeFaceAdjacency)) {
-                    if (adjacency.length === 1) { // Outer edge condition
-                        let [ev1, ev2] = EV[edgeIndex];
-                        let [x1, y1] = VC[ev1];
-                        let [x2, y2] = VC[ev2];
-            
-                        const transformedX1 = transformCoord(x1, minX, maxX);
-                        const transformedY1 = transformCoord(y1, minY, maxY);
-                        const transformedX2 = transformCoord(x2, minX, maxX);
-                        const transformedY2 = transformCoord(y2, minY, maxY);
-            
-                        const line = document.createElementNS(svgNameSpace, 'line');
-                        line.setAttribute('x1', transformedX1);
-                        line.setAttribute('y1', transformedY1);
-                        line.setAttribute('x2', transformedX2);
-                        line.setAttribute('y2', transformedY2);
-                        line.setAttribute('stroke', 'yellow'); // Highlight outer edges in yellow
-                        line.setAttribute('stroke-width', '2'); // Make it more visible
-                        svg.appendChild(line);
-                    }
                 }
             };
             
             // Add this function just before appending the SVG
             const highlightVisitedEdges = (visitedEdges, EV, VC, transformCoord, minX, maxX, minY, maxY, svg) => {
+                // First, define the arrowhead marker
+                const defs = document.createElementNS(svgNameSpace, 'defs');
+                svg.appendChild(defs);
+                
+                // Create two markers - one for each color
+                const createMarker = (id, color) => {
+                    const marker = document.createElementNS(svgNameSpace, 'marker');
+                    marker.setAttribute('id', id);
+                    marker.setAttribute('viewBox', '0 0 10 10');
+                    marker.setAttribute('refX', '5');
+                    marker.setAttribute('refY', '5');
+                    marker.setAttribute('markerWidth', '2.5');
+                    marker.setAttribute('markerHeight', '2.5');
+                    marker.setAttribute('orient', 'auto');
+                    
+                    const path = document.createElementNS(svgNameSpace, 'path');
+                    path.setAttribute('d', 'M 0 0 L 10 5 L 0 10 z');
+                    path.setAttribute('fill', color);
+                    
+                    marker.appendChild(path);
+                    return marker;
+                };
+                
+                defs.appendChild(createMarker('arrowPink', 'pink'));
+                defs.appendChild(createMarker('arrowOrange', 'orange'));
+                
                 visitedEdges.forEach((edgeData, edgeKey) => {
                     // Parse the edge key back to vertex indices
                     const [v1, v2] = edgeKey.split(",").map(Number);
                     
                     // Find the corresponding edge in EV
-                    const edgeIndex = EV.findIndex(edge => 
-                        (edge[0] === v1 && edge[1] === v2) || 
+                    const edgeIndex = EV.findIndex(edge =>
+                        (edge[0] === v1 && edge[1] === v2) ||
                         (edge[0] === v2 && edge[1] === v1)
                     );
                     
@@ -337,16 +348,35 @@ const uploadFile = (event) => {
             
                         // Determine color based on edge direction
                         const lineColor = edgeData[2] === 1 ? 'pink' : 'orange';
-            
-                        const line = document.createElementNS(svgNameSpace, 'line');
-                        line.setAttribute('x1', transformedX1);
-                        line.setAttribute('y1', transformedY1);
-                        line.setAttribute('x2', transformedX2);
-                        line.setAttribute('y2', transformedY2);
-                        line.setAttribute('stroke', lineColor);
-                        line.setAttribute('stroke-width', '10'); // Make it thicker to stand out
-                        line.setAttribute('opacity', '0.8'); // Slightly transparent
-                        svg.appendChild(line);
+                        const arrowMarkerId = edgeData[2] === 1 ? 'arrowPink' : 'arrowOrange';
+                        
+                        // Instead of using a line with marker-end, use a path to place the marker in the middle
+                        // Calculate midpoint of the line
+                        const midX = (transformedX1 + transformedX2) / 2;
+                        const midY = (transformedY1 + transformedY2) / 2;
+                        
+                        // Create two line segments - one from start to middle, one from middle to end
+                        const line1 = document.createElementNS(svgNameSpace, 'line');
+                        line1.setAttribute('x1', transformedX1);
+                        line1.setAttribute('y1', transformedY1);
+                        line1.setAttribute('x2', midX);
+                        line1.setAttribute('y2', midY);
+                        line1.setAttribute('stroke', lineColor);
+                        line1.setAttribute('stroke-width', '5');
+                        line1.setAttribute('opacity', '0.8');
+                        
+                        const line2 = document.createElementNS(svgNameSpace, 'line');
+                        line2.setAttribute('x1', midX);
+                        line2.setAttribute('y1', midY);
+                        line2.setAttribute('x2', transformedX2);
+                        line2.setAttribute('y2', transformedY2);
+                        line2.setAttribute('stroke', lineColor);
+                        line2.setAttribute('stroke-width', '5');
+                        line2.setAttribute('opacity', '0.8');
+                        line2.setAttribute('marker-start', `url(#${arrowMarkerId})`); // Add arrowhead at the start of second segment
+                        
+                        svg.appendChild(line1);
+                        svg.appendChild(line2);
                     }
                 });
             };
@@ -354,7 +384,7 @@ const uploadFile = (event) => {
             if (folded == "unfolded"){
                 container1.appendChild(svg);
                 drawArrows(edgeFaceAdjacency, FD)
-                highlightOuterEdges(edgeFaceAdjacency, EV, VC);
+                // highlightOuterEdges(edgeFaceAdjacency, EV, VC);
             } else if (folded == 'folded') {
                 container2.appendChild(svg)
             }
@@ -421,10 +451,11 @@ const findAdjacentFaces = (FV, FO) => {
             const next = face[(j + 1) % face.length];
             const edgeKey = [current, next].toString();
             const reverseEdgeKey = [next, current].toString();
-            if (edgeFaceAdjacency.has(reverseEdgeKey)) {
-                edgeFaceAdjacency.get(reverseEdgeKey)[0] = i;
+            const adjacentFaces = edgeFaceAdjacency.get(reverseEdgeKey);
+            if (adjacentFaces) {
+                adjacentFaces[0] = i;
             } else {
-                edgeFaceAdjacency.set(edgeKey, [, i]);
+                edgeFaceAdjacency.set(edgeKey, [undefined, i]);
             }
         });
     });
@@ -448,27 +479,25 @@ const findAdjacentFaces = (FV, FO) => {
 };
 
 const createEdgesAssignment = (edgeFaceAdjacency, EV) => {
-    // Initialize EA with "U" (unassigned) for all edges
+    // Initialize EA with "B" (Border) for all edges
     const EA = new Array(EV.length).fill("B");
     
-    // Helper function to check if two edges match (regardless of order)
-    const edgesMatch = (edge1, edge2) => {
-        return (edge1[0] === edge2[0] && edge1[1] === edge2[1]) ||
-               (edge1[0] === edge2[1] && edge1[1] === edge2[0]);
-    };
+    // Create a lookup map for faster edge matching
+    const edgeToIndexMap = new Map();
+    EV.forEach((edge, index) => {
+        const forwardKey = edge.toString();
+        const reverseKey = [edge[1], edge[0]].toString();
+        edgeToIndexMap.set(forwardKey, index);
+        edgeToIndexMap.set(reverseKey, index);
+    });
     
     // Iterate through edgeFaceAdjacency
     for (const [edgeKey, faceData] of edgeFaceAdjacency.entries()) {
-        // Convert edge key string back to array of vertices
-        const ev = edgeKey.split(',').map(Number);
-        
-        // Find matching edge in EV
-        const edgeIndex = EV.findIndex(edge => 
-            edgesMatch(edge, ev)
-        );
+        // Get the edge index directly from the map
+        const edgeIndex = edgeToIndexMap.get(edgeKey);
         
         // If we found a matching edge
-        if (edgeIndex !== -1) {
+        if (edgeIndex !== undefined) {
             // Get the face order value (third element in faceData)
             const order = faceData[2];
             
@@ -550,6 +579,8 @@ const findUnfoldedVertices = (edgeFaceAdjacency) => {
         
     }
     
+    const sortedUnfoldedVertices = [...unfoldedVertices].sort((a, b) => a - b);
+    console.log(sortedUnfoldedVertices)
     return unfoldedVertices
 };
 
@@ -562,10 +593,11 @@ const setLeftRightOrderFO = (FV, arrowset) => {
             const next = face[(j + 1) % face.length];
             const edgeKey = [current, next].toString();
             const reverseEdgeKey = [next, current].toString();
-            if (edgeLeftOrRight.has(reverseEdgeKey)) {
-                edgeLeftOrRight.get(reverseEdgeKey)[0] = i;
+            const leftRight = edgeLeftOrRight.get(reverseEdgeKey);
+            if (leftRight) {
+                leftRight[0] = i;
             } else {
-                edgeLeftOrRight.set(edgeKey, [undefined, i]); // Use undefined instead of empty slot
+                edgeLeftOrRight.set(edgeKey, [undefined, i]);
             }
         });
     });
@@ -574,10 +606,17 @@ const setLeftRightOrderFO = (FV, arrowset) => {
     edgeLeftOrRight.forEach((faces, edgeKey) => {
         if (faces.length === 2 && faces[0] !== undefined && faces[1] !== undefined) {
             const [f1, f2] = faces;
-            if (arrowset.some(([a, b]) => a === f1 && b === f2)) {
-                edgeLeftOrRight.set(edgeKey, [...faces, 1]);
-            } else if (arrowset.some(([a, b]) => a === f2 && b === f1)) {
-                edgeLeftOrRight.set(edgeKey, [...faces, -1]);
+            // Create a lookup structure:
+            const arrowDirections = new Map();
+            arrowset.forEach(([start, end]) => {
+                arrowDirections.set(`${start},${end}`, 1);
+                arrowDirections.set(`${end},${start}`, -1);
+            });
+
+            // Then use:
+            const direction = arrowDirections.get(`${f1},${f2}`);
+            if (direction) {
+                edgeLeftOrRight.set(edgeKey, [...faces, direction]);
             }
         }
     });
@@ -663,8 +702,11 @@ const dfsLeftToRightEdges = (startVertex, edgeLeftOrRight, unfoldedVertices) => 
                     visitedEdges.set(edgeKey, edgeData);
                    
                     // If the destination vertex is NOT in unfolded vertices, add to next vertices
-                    if (!visitedVertices.has(v2) &&
-                        (!unfoldedVertices.has(v2) || currentVertex === startVertex)) {
+                    // If the destination vertex is NOT in unfolded vertices OR
+                    // the destination is the start vertex itself, add to next vertices
+                    const isVisited = visitedVertices.has(v2);
+                    const isUnfolded = unfoldedVertices.has(v2);
+                    if (!isVisited && !isUnfolded) {
                         nextVertices.push({
                             vertex: v2,
                             // Persist the direction found in the first edge
