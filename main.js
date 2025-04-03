@@ -42,7 +42,7 @@ const uploadFile = (event) => {
             document.getElementById('globalFO').textContent = globalFO
         }
 
-        const drawSVG = (folded, FOLD, edgeFaceAdjacency) => {
+        const drawSVG = (folded, FOLD, edgeFaceAdjacency, movingAndNotMovingFaces) => {
             
             if (document.getElementById('container2')) {
                 document.getElementById('container2').remove()
@@ -66,35 +66,40 @@ const uploadFile = (event) => {
             const padding = 20;
             const effectiveSize = svgSize - (2 * padding);
             const svgNameSpace = 'http://www.w3.org/2000/svg';
-
+        
+            // State variables for toggle features
+            let showVertexLabels = true;
+            let showGreenArrows = true;
+            let showFaceLabels = true;
+        
             // logic for if you want to display an unfolded state
             if (folded == "unfolded") {
                 VC = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[0]; 
                 edgeFaceAdjacency = findAdjacentFaces(FV, FO);
                 FD = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[1];
             }
-
+        
             let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
+        
             VC.forEach(([x, y]) => {
                 minX = Math.min(minX, x);
                 minY = Math.min(minY, y);
                 maxX = Math.max(maxX, x);
                 maxY = Math.max(maxY, y);
             });
-
+        
             // Calculate scaling factor to fit the drawing
             const width = maxX - minX;
             const height = maxY - minY;
             const scale = Math.min(effectiveSize / width, effectiveSize / height);
-
+        
             const transformCoord = (coord, min, max) => {
                 const centered = coord - min;
                 const scaled = centered * scale;
                 const offset = padding + (effectiveSize - (max - min) * scale) / 2;
                 return scaled + offset;
             };
-
+        
             // Create container and SVG element
             let container1 = document.getElementById('container1');
             let container2 = document.getElementById('container2');
@@ -117,7 +122,7 @@ const uploadFile = (event) => {
             svg.setAttribute('style', 'border: none');
                 
             let highlightedCircle = null; // Keep track of the currently highlighted circle
-
+        
             const handleVertexClick = (event) => {
                 const vertexId = event.target.dataset.vertexId; // Get the vertex ID from the invisible circle
                 if (!vertexId) return;
@@ -138,14 +143,19 @@ const uploadFile = (event) => {
             
                 // Call the search function and capture visited edges
                 const edgeLeftOrRight = setLeftRightOrderFO(FOLD["faces_vertices"], arrowset);
-                const visitedEdges = dfsLeftToRightEdges(vertexId, edgeLeftOrRight, findUnfoldedVertices(edgeFaceAdjacency));
+                const visitedEdges = dfsLeftToRightEdges(vertexId, edgeLeftOrRight, unfoldedVertices);
+                
+                // const colorsort = dfsFaceTraversal(FOLD, vertexId, visitedEdges, movingAndNotMovingFaces);
+                const colorsort = colorMovingFaces(FOLD, vertexId, visitedEdges, movingAndNotMovingFaces);
+
+                const reverseFolds = findSimilarAngleEdges(visitedEdges, FOLD["vertices_coords"]);
             
                 // Highlight visited edges if in unfolded state
-                if (folded === "unfolded") {
-                    highlightVisitedEdges(visitedEdges, EV, VC, transformCoord, minX, maxX, minY, maxY, svg);
-                }
+                // if (folded === "unfolded") {
+                highlightVisitedEdges(visitedEdges, EV, VC, transformCoord, minX, maxX, minY, maxY, svg);
+                
             };
-
+        
             // Draw edges
             const colors = new Map([
                 ['M', 'red'],
@@ -156,7 +166,7 @@ const uploadFile = (event) => {
                 let [ev1, ev2] = ev;
                 let [x1, y1] = VC[ev1];
                 let [x2, y2] = VC[ev2];
-
+        
                 const transformedX1 = transformCoord(x1, minX, maxX);
                 const transformedY1 = transformCoord(y1, minY, maxY);
                 const transformedX2 = transformCoord(x2, minX, maxX);
@@ -175,7 +185,16 @@ const uploadFile = (event) => {
                 line.setAttribute('stroke-width', '0.5');
                 svg.appendChild(line);
             });
+        
+            // Store all vertex labels in a group for easy toggling
+            const vertexLabelsGroup = document.createElementNS(svgNameSpace, 'g');
+            vertexLabelsGroup.setAttribute('id', 'vertex-labels');
+            svg.appendChild(vertexLabelsGroup);
 
+            const faceLabelsGroup = document.createElementNS(svgNameSpace, 'g');
+            faceLabelsGroup.setAttribute('id', 'face-labels');
+            svg.appendChild(faceLabelsGroup);
+        
             // Modify the vertex drawing loop to add event listeners
             VC.forEach((vc, i) => {
                 const [x, y] = vc;
@@ -211,7 +230,7 @@ const uploadFile = (event) => {
                             event.target.setAttribute('fill', 'transparent');
                         }
                     });
-
+        
                     // Append highlight circle
                     svg.appendChild(highlightCircle);
                 }
@@ -224,10 +243,11 @@ const uploadFile = (event) => {
                     text.setAttribute('font-size', '10');
                     text.setAttribute('fill', 'black');
                     text.textContent = i;
-                    svg.appendChild(text);
+                    text.classList.add('vertex-label');
+                    vertexLabelsGroup.appendChild(text);
                 }
             });
-
+        
             // Add arrow marker
             const marker = document.createElementNS(svgNameSpace, 'marker');
             marker.setAttribute('id', 'arrow');
@@ -243,6 +263,11 @@ const uploadFile = (event) => {
             path.setAttribute('fill', 'green');
             marker.appendChild(path);
             svg.appendChild(marker);
+        
+            // Create a group for green arrows to make them toggleable
+            const greenArrowsGroup = document.createElementNS(svgNameSpace, 'g');
+            greenArrowsGroup.setAttribute('id', 'green-arrows');
+            svg.appendChild(greenArrowsGroup);
         
             // Draw arrows
             const drawArrows = (edgeFaceAdjacency, FD) => {
@@ -294,11 +319,11 @@ const uploadFile = (event) => {
                     line.setAttribute('stroke', 'green');
                     line.setAttribute('stroke-width', '0.6');
                     line.setAttribute('marker-end', 'url(#arrow)');
-                    svg.appendChild(line);
+                    line.classList.add('green-arrow');
+                    greenArrowsGroup.appendChild(line);
                 }
             };
             
-            // Add this function just before appending the SVG
             const highlightVisitedEdges = (visitedEdges, EV, VC, transformCoord, minX, maxX, minY, maxY, svg) => {
                 // First, define the arrowhead marker
                 const defs = document.createElementNS(svgNameSpace, 'defs');
@@ -381,27 +406,163 @@ const uploadFile = (event) => {
                 });
             };
 
-            if (folded == "unfolded"){
+            // Function to draw face labels
+            const drawFaceLabels = (FV, VC) => {
+                // For each face
+                FV.forEach((faceVertices, faceIndex) => {
+                    // Calculate centroid of the face
+                    const facePoints = faceVertices.map(v => VC[v]);
+                    const centroid = M.centroid(facePoints);
+                    
+                    // Transform coordinates
+                    const x = transformCoord(centroid[0], minX, maxX);
+                    const y = transformCoord(centroid[1], minY, maxY);
+                    
+                    // Create label
+                    const text = document.createElementNS(svgNameSpace, 'text');
+                    text.setAttribute('x', x);
+                    text.setAttribute('y', y);
+                    text.setAttribute('font-size', '12');
+                    text.setAttribute('fill', 'purple');
+                    text.setAttribute('text-anchor', 'middle');
+                    text.textContent = faceIndex;
+                    text.classList.add('face-label');
+                    
+                    // Add to face labels group
+                    faceLabelsGroup.appendChild(text);
+                });
+            };
+        
+            // Create toggle controls only for unfolded state
+            if (folded == "unfolded") {
+                // Create a control panel for toggle buttons
+                const controlPanel = document.createElement('div');
+                controlPanel.style.marginTop = '10px';
+                controlPanel.style.display = 'flex';
+                controlPanel.style.gap = '10px';
+                controlPanel.style.justifyContent = 'center';
+        
+                // Create toggle button for vertex labels
+                const toggleLabelsBtn = document.createElement('button');
+                toggleLabelsBtn.textContent = 'Toggle Vertex Labels';
+                toggleLabelsBtn.style.padding = '5px 10px';
+                toggleLabelsBtn.style.cursor = 'pointer';
+                
+                toggleLabelsBtn.addEventListener('click', () => {
+                    showVertexLabels = !showVertexLabels;
+                    vertexLabelsGroup.style.display = showVertexLabels ? 'block' : 'none';
+                });
+                
+                // Create toggle button for green arrows
+                const toggleArrowsBtn = document.createElement('button');
+                toggleArrowsBtn.textContent = 'Toggle Green Arrows';
+                toggleArrowsBtn.style.padding = '5px 10px';
+                toggleArrowsBtn.style.cursor = 'pointer';
+                
+                toggleArrowsBtn.addEventListener('click', () => {
+                    showGreenArrows = !showGreenArrows;
+                    greenArrowsGroup.style.display = showGreenArrows ? 'block' : 'none';
+                });
+
+                const toggleFaceLabelsBtn = document.createElement('button');
+                toggleFaceLabelsBtn.textContent = 'Toggle Face Labels';
+                toggleFaceLabelsBtn.style.padding = '5px 10px';
+                toggleFaceLabelsBtn.style.cursor = 'pointer';
+
+                toggleFaceLabelsBtn.addEventListener('click', () => {
+                    showFaceLabels = !showFaceLabels;
+                    faceLabelsGroup.style.display = showFaceLabels ? 'block' : 'none';
+                });
+
+                const toggleMovingFacesBtn = document.createElement('button');
+                toggleMovingFacesBtn.textContent = 'Swap Moving Faces';
+                toggleMovingFacesBtn.style.padding = '5px 10px';
+                toggleMovingFacesBtn.style.cursor = 'pointer';
+                
+                toggleMovingFacesBtn.addEventListener('click', () => {
+                    // Swap the moving and not moving faces
+                    movingAndNotMovingFaces = swapMovingAndNotMovingFaces(movingAndNotMovingFaces);
+                    
+                    // Remove existing face shadings
+                    const existingFaceShadings = svg.querySelectorAll('path[fill="rgba(128, 128, 128, 0.3)"]');
+                    existingFaceShadings.forEach(shading => shading.remove());
+                    
+                    // Shade the new moving faces
+                    if (movingAndNotMovingFaces && movingAndNotMovingFaces.movingFaces) {
+                        shadeFaces(FV, VC, movingAndNotMovingFaces.movingFaces, minX, maxX, minY, maxY);
+                    }
+                });
+                
+            
+                // Add buttons to control panel
+                controlPanel.appendChild(toggleLabelsBtn);
+                controlPanel.appendChild(toggleArrowsBtn);
+                controlPanel.appendChild(toggleFaceLabelsBtn);
+                // Add the new toggle button here
+                controlPanel.appendChild(toggleMovingFacesBtn);
+                
+                // Append SVG and controls to container
                 container1.appendChild(svg);
-                drawArrows(edgeFaceAdjacency, FD)
-                // highlightOuterEdges(edgeFaceAdjacency, EV, VC);
+                container1.appendChild(controlPanel);
+                
+                // Draw arrows
+                drawArrows(edgeFaceAdjacency, FD);
+                drawFaceLabels(FV, VC);
             } else if (folded == 'folded') {
-                container2.appendChild(svg)
+                container2.appendChild(svg);
             }
             
-        };
+            // Function to shade moving faces
+            const shadeFaces = (FV, VC, movingFaces, minX, maxX, minY, maxY) => {
+                movingFaces.forEach(faceIndex => {
+                    // Get vertices of the face
+                    const faceVertices = FV[faceIndex].map(v => VC[v]);
+                    
+                    // Create a polygon path for the face
+                    const path = document.createElementNS(svgNameSpace, 'path');
+                    
+                    // Generate the path data
+                    const pathData = faceVertices.map((vertex, index) => {
+                        const x = transformCoord(vertex[0], minX, maxX);
+                        const y = transformCoord(vertex[1], minY, maxY);
+                        return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
+                    }).join(' ') + ' Z';
+                    
+                    path.setAttribute('d', pathData);
+                    path.setAttribute('fill', 'rgba(128, 128, 128, 0.3)'); // Light grey with some transparency
+                    path.setAttribute('stroke', 'none');
+                    
+                    // Insert the path before other elements to not obstruct them
+                    svg.insertBefore(path, svg.firstChild);
+                });
+            };
 
-        // const submit = document.getElementById("submit");
-        // submit.addEventListener("click", () => displayOuterEdgeNodes(FOLD));
-        // submit.addEventListener("click", () => drawSVG("unfolded", FOLD, edgeFaceAdjacency))
-        // submit.addEventListener("click", () => drawSVG("folded", FOLD, edgeFaceAdjacency)) 
-
+            // Modify the existing drawing logic to call this function
+            if (folded == "unfolded") {
+                // Existing unfolded state drawing code...
+                
+                // Add this line to shade moving faces
+                if (movingAndNotMovingFaces && movingAndNotMovingFaces.movingFaces) {
+                    shadeFaces(FV, VC, movingAndNotMovingFaces.movingFaces, minX, maxX, minY, maxY);
+                }
+            } else if (folded == 'folded') {
+                // Existing folded state drawing code...
+                
+                // Add this line to shade moving faces in folded state as well
+                if (movingAndNotMovingFaces && movingAndNotMovingFaces.movingFaces) {
+                    shadeFaces(FV, VC, movingAndNotMovingFaces.movingFaces, minX, maxX, minY, maxY);
+                }
+            }
+        }
 
         displayOuterEdgeNodes(FOLD);
-        drawSVG("unfolded", FOLD, edgeFaceAdjacency); 
-        drawSVG("folded", FOLD, edgeFaceAdjacency);
-        findUnfoldedVertices(edgeFaceAdjacency);
+        const movingAndNotMovingFaces = findAlternatingGroups(FOLD, 0);
+        drawSVG("unfolded", FOLD, edgeFaceAdjacency, movingAndNotMovingFaces); 
+        drawSVG("folded", FOLD, edgeFaceAdjacency, movingAndNotMovingFaces);
+        const unfoldedVertices = findUnfoldedVertices(edgeFaceAdjacency);
         setLeftRightOrderFO(FOLD["faces_vertices"], arrowset);
+        // const coloredFaces = colorMovingFaces(FOLD, movingAndNotMovingFaces);
+
     };
     
     fr.readAsText(event.target.files[0]); // Use event.target for file input reference
@@ -580,7 +741,7 @@ const findUnfoldedVertices = (edgeFaceAdjacency) => {
     }
     
     const sortedUnfoldedVertices = [...unfoldedVertices].sort((a, b) => a - b);
-    console.log(sortedUnfoldedVertices)
+    // console.log("sorted unfolded vertices", sortedUnfoldedVertices)
     return unfoldedVertices
 };
 
@@ -654,86 +815,448 @@ const setLeftRightOrderFO = (FV, arrowset) => {
 
 const dfsLeftToRightEdges = (startVertex, edgeLeftOrRight, unfoldedVertices) => {
     startVertex = Number(startVertex);
-    console.log("Edge left or right map:");
-    console.log(edgeLeftOrRight);
-    console.log("Starting DFS from vertex:", startVertex);
-    console.log("Unfolded vertices:", unfoldedVertices);
    
-    const visitedEdges = new Map();
-    const visitedVertices = new Set();
-    const stack = [{ vertex: startVertex, direction: null }];
-   
-    while (stack.length > 0) {
-        const { vertex: currentVertex, direction: currentDirection } = stack.pop();
-       
-        // Skip if we've already processed this vertex
-        if (visitedVertices.has(currentVertex)) continue;
-       
-        console.log("Processing vertex:", currentVertex, "with direction:", currentDirection);
-        visitedVertices.add(currentVertex);
-       
-        let foundEdge = false; // Track if we find any traversable edge from currentVertex
-       
-        // Collect all potential next vertices first
-        const nextVertices = [];
-       
-        // Check all edges in the map
+    const validEdges = new Map(); // Stores only edges in valid paths
+    const knownGoodVertices = new Set(); // Vertices known to reach valid endpoints
+    
+    // Add all unfolded vertices to known good
+    for (const vertex of unfoldedVertices) {
+        knownGoodVertices.add(vertex);
+    }
+    
+    const exploreFrom = (vertex, direction, path, edgesInPath) => {
+        // If this vertex is already known to reach a valid endpoint
+        if (knownGoodVertices.has(vertex) && vertex !== startVertex) {
+            // Add all edges from this path to valid edges
+            for (const [edgeKey, edgeData] of edgesInPath.entries()) {
+                validEdges.set(edgeKey, edgeData);
+            }
+            // Mark all vertices in path as known good
+            for (const v of path) {
+                knownGoodVertices.add(v);
+            }
+            return true; // Valid path found
+        }
+        
+        let foundValidPath = false;
+        
+        // Try all possible next edges
         for (const [edgeKey, edgeData] of edgeLeftOrRight.entries()) {
             const [v1, v2] = edgeKey.split(",").map(Number);
-           
-            // Only check edges starting from currentVertex
-            if (v1 === currentVertex) {
-                console.log(`Checking forward edge ${v1}->${v2}, data:`, edgeData);
-               
-                // Check if leftToRight order is defined
-                if (!Array.isArray(edgeData) || edgeData[2] === undefined) {
-                    console.log(`Skipping edge ${v1}->${v2} due to undefined leftToRight order`);
-                    continue;
-                }
-               
-                // If no current direction, use the edge's direction
-                // Otherwise, match the current direction
-                const matchesDirection = currentDirection === null || edgeData[2] === currentDirection;
-               
-                if (matchesDirection) {
-                    console.log(`Found ${edgeData[2] === 1 ? 'leftToRight' : 'rightToLeft'} forward edge from ${v1} to ${v2}`);
-                   
-                    // Add this edge to visited edges
-                    visitedEdges.set(edgeKey, edgeData);
-                   
-                    // If the destination vertex is NOT in unfolded vertices, add to next vertices
-                    // If the destination vertex is NOT in unfolded vertices OR
-                    // the destination is the start vertex itself, add to next vertices
-                    const isVisited = visitedVertices.has(v2);
-                    const isUnfolded = unfoldedVertices.has(v2);
-                    if (!isVisited && !isUnfolded) {
-                        nextVertices.push({
-                            vertex: v2,
-                            // Persist the direction found in the first edge
-                            direction: currentDirection === null ? edgeData[2] : currentDirection
-                        });
-                        foundEdge = true;
-                    }
-                }
+            
+            // Only consider edges from current vertex
+            if (v1 !== vertex) continue;
+            
+            // Validate edge data and direction
+            if (!Array.isArray(edgeData) || edgeData[2] === undefined) continue;
+            
+            // Check direction compatibility
+            const newDirection = direction === null ? edgeData[2] : direction;
+            if (newDirection !== edgeData[2]) continue;
+            
+            // Avoid cycles - skip if destination is already in path
+            if (path.has(v2)) continue;
+            
+            // Create new path and edges collection
+            const newPath = new Set(path);
+            newPath.add(v2);
+            
+            const newEdges = new Map(edgesInPath);
+            newEdges.set(edgeKey, edgeData);
+            
+            // Explore from the new vertex
+            if (exploreFrom(v2, newDirection, newPath, newEdges)) {
+                foundValidPath = true;
+                // We don't return early to ensure we find all valid paths
             }
         }
-       
-        // Add next vertices to stack in reverse order to maintain DFS order
-        for (const vertexInfo of nextVertices.reverse()) {
-            stack.push(vertexInfo);
+        
+        // If this vertex leads to a valid path, mark it as known good
+        if (foundValidPath) {
+            knownGoodVertices.add(vertex);
         }
-       
-        // Special handling for start vertex being in unfolded vertices
-        if (currentVertex === startVertex && unfoldedVertices.has(currentVertex) && !foundEdge) {
-            console.log(`Start vertex ${currentVertex} is in unfolded vertices with no valid edges.`);
+        
+        return foundValidPath;
+    };
+    
+    // Start DFS from the starting vertex
+    exploreFrom(startVertex, null, new Set([startVertex]), new Map());
+    
+    console.log("Valid edges found:", validEdges);
+    return validEdges;
+};
+
+function labelFaces(FOLD, startFaceIndex) {
+    const FV = FOLD.faces_vertices;
+    const edgeFaceAdjacency = findAdjacentFaces(FV, FOLD.faceOrders);
+    
+    // Initialize face labels
+    const faceLabels = new Map();
+    const visitedFaces = new Set();
+    
+    // Queue for faces to process
+    const faceQueue = [{ faceIndex: startFaceIndex, label: 1 }];
+    
+    // Process faces until queue is empty
+    while (faceQueue.length > 0) {
+        const current = faceQueue.shift();
+        const { faceIndex, label } = current;
+        
+        // Skip if already visited
+        if (visitedFaces.has(faceIndex)) continue;
+        
+        // Mark as visited and label
+        visitedFaces.add(faceIndex);
+        faceLabels.set(faceIndex, label);
+        
+        // Get adjacent faces
+        const adjacentFaces = getAdjacentFaces(faceIndex);
+        
+        // Process each adjacent face
+        for (const { adjacentFace, isUnfolded } of adjacentFaces) {
+            if (visitedFaces.has(adjacentFace)) continue;
+            
+            // Determine the label for the adjacent face
+            let adjacentLabel;
+            if (isUnfolded) {
+                // Unfolded line - use opposite label
+                adjacentLabel = label === 1 ? -1 : 1;
+            } else {
+                // Regular fold - use same label
+                adjacentLabel = label;
+            }
+            
+            // Add to queue
+            faceQueue.push({ faceIndex: adjacentFace, label: adjacentLabel });
         }
-       
-        if (!foundEdge && currentVertex !== startVertex) {
-            console.log(`No valid edges found from vertex ${currentVertex}`);
+    }
+    
+    // Function to get adjacent faces
+    function getAdjacentFaces(faceIndex) {
+        const adjacentFaces = [];
+        
+        // For each edge of the current face
+        FV[faceIndex].forEach((v1, i) => {
+            const v2 = FV[faceIndex][(i + 1) % FV[faceIndex].length];
+            const edgeKey = [v1, v2].toString();
+            const reverseEdgeKey = [v2, v1].toString();
+            
+            // Get the edge data
+            const edgeData = edgeFaceAdjacency.get(edgeKey) || edgeFaceAdjacency.get(reverseEdgeKey);
+            
+            if (!edgeData) return;
+            
+            // Find the adjacent face
+            const [f1, f2, foldOrder] = edgeData;
+            const adjacentFace = f1 === faceIndex ? f2 : f1;
+            
+            // Skip if no adjacent face
+            if (adjacentFace === undefined) return;
+            
+            // Check if it's an unfolded line
+            const isUnfolded = foldOrder === undefined;
+            
+            adjacentFaces.push({ adjacentFace, isUnfolded });
+        });
+        
+        return adjacentFaces;
+    }
+    
+    return faceLabels;
+}
+
+// Helper function to find alternating connected components
+function findAlternatingGroups(FOLD, startFaceIndex) {
+    const faceLabels = labelFaces(FOLD, startFaceIndex);
+   
+    const movingFaces = [];
+    const notMovingFaces = [];
+   
+    // Group faces by label
+    for (const [faceIndex, label] of faceLabels.entries()) {
+        if (label === 1) {
+            movingFaces.push(faceIndex);
+        } else {
+            notMovingFaces.push(faceIndex);
         }
     }
    
-    console.log("Visited edges:", visitedEdges);
-    return visitedEdges;
-};
+    // Sort faces numerically
+    movingFaces.sort((a, b) => a - b);
+    notMovingFaces.sort((a, b) => a - b);
+   
+    // console.log("Moving faces:", movingFaces);
+    // console.log("Not moving faces:", notMovingFaces);
+   
+    return { movingFaces, notMovingFaces };
+}
+
+function swapMovingAndNotMovingFaces(faceLabels) {
+    // Destructure the existing face labels
+    const { movingFaces, notMovingFaces } = faceLabels;
+
+    // Return with arrays swapped
+    return {
+      movingFaces: notMovingFaces,
+      notMovingFaces: movingFaces
+    };
+}
+
+function dfsFaceTraversal(FOLD, startVertex, dfsLeftToRightEdges, movingAndNotMovingFaces) {
+    // Validate inputs
+    if (!FOLD || !FOLD.faces_vertices) {
+        console.error('Invalid FOLD object');
+        return {
+            visitedFaces: new Set(),
+            traversalPath: [],
+            coloredFaces: new Set()
+        };
+    }
+    const FV = FOLD.faces_vertices;
+   
+    // Ensure startVertex is a number
+    startVertex = Number(startVertex);
+
+    // Find faces containing the starting vertex that are also in movingFaces
+    const adjacentFacesOfVertex = FV.reduce((faces, face, faceIndex) => {
+        if (face.includes(startVertex) && 
+            movingAndNotMovingFaces.movingFaces.includes(faceIndex)) {
+            faces.add(faceIndex);
+        }
+        return faces;
+    }, new Set());
+
+    // If no adjacent faces found, return empty results
+    if (adjacentFacesOfVertex.size === 0) {
+        console.warn(`No moving faces found containing vertex ${startVertex}`);
+        return {
+            visitedFaces: new Set(),
+            traversalPath: [],
+            coloredFaces: new Set()
+        };
+    }
+
+    // Safely get edge face adjacency
+    let edgeFaceAdjacency;
+    try {
+        edgeFaceAdjacency = findAdjacentFaces(FV, FOLD.faceOrders || []);
+    } catch (error) {
+        console.error('Error finding adjacent faces:', error);
+        return {
+            visitedFaces: new Set(),
+            traversalPath: [],
+            coloredFaces: new Set()
+        };
+    }
+
+    // Select the first face to start DFS
+    const startFace = [...adjacentFacesOfVertex][0];
+   
+    // Track visited faces and traversal path
+    const visitedFaces = new Set();
+    const traversalPath = [];
+    const coloredFaces = new Set();
+
+    // Stack for DFS traversal
+    const stack = [{
+        currentFace: startFace,
+        parentFace: null,
+        depth: 0
+    }];
+
+    const MAX_DEPTH = FV.length * 2; // Prevent infinite loops
+    while (stack.length > 0) {
+        const {
+            currentFace,
+            parentFace,
+            depth
+        } = stack.pop();
+
+        // Prevent infinite loops
+        if (depth > MAX_DEPTH) {
+            console.warn('Max depth reached, stopping traversal');
+            break;
+        }
+
+        // Skip already visited faces
+        if (visitedFaces.has(currentFace)) continue;
+
+        // Mark current face as visited and colored
+        visitedFaces.add(currentFace);
+        coloredFaces.add(currentFace);
+        traversalPath.push(currentFace);
+
+        // Explore edges of the current face
+        for (let i = 0; i < FV[currentFace].length; i++) {
+            const v1 = FV[currentFace][i];
+            const v2 = FV[currentFace][(i + 1) % FV[currentFace].length];
+           
+            // Create edge keys
+            const edgeKey = [v1, v2].toString();
+            const reverseEdgeKey = [v2, v1].toString();
+           
+            // Get the edge data
+            const edgeData = edgeFaceAdjacency.get(edgeKey) ||
+                             edgeFaceAdjacency.get(reverseEdgeKey);
+           
+            if (!edgeData) continue;
+           
+            // Find the adjacent face
+            const [f1, f2, foldOrder] = edgeData;
+            const adjacentFace = f1 === currentFace ? f2 : f1;
+           
+            // Skip if no adjacent face or is the parent face
+            if (adjacentFace === undefined || adjacentFace === parentFace) continue;
+           
+            // Skip if already visited
+            if (visitedFaces.has(adjacentFace)) continue;
+
+            // Only continue if the adjacent face is in movingFaces
+            if (!movingAndNotMovingFaces.movingFaces.includes(adjacentFace)) continue;
+           
+            // Check if it's an unfolded edge
+            const isUnfoldedEdge = foldOrder === undefined;
+           
+            // Check if the edge is in dfsLeftToRightEdges
+            let isLeftToRightEdge = false;
+            if (dfsLeftToRightEdges) {
+                const leftToRightEdgeKey = [v1, v2].toString();
+                const reverseLeftToRightEdgeKey = [v2, v1].toString();
+                isLeftToRightEdge =
+                    dfsLeftToRightEdges.has(leftToRightEdgeKey) ||
+                    dfsLeftToRightEdges.has(reverseLeftToRightEdgeKey);
+            }
+           
+            // If unfolded edge or left-to-right edge, backtrack
+            if (isUnfoldedEdge || isLeftToRightEdge) {
+                // Do not add this face to the stack
+                continue;
+            }
+           
+            // Add to stack for further exploration
+            stack.push({
+                currentFace: adjacentFace,
+                parentFace: currentFace,
+                depth: depth + 1
+            });
+        }
+    }
+
+    // console.log('Visited faces:', visitedFaces);
+    // console.log('Traversal path:', traversalPath);
+    // console.log('Colored faces:', coloredFaces);
+    return {
+        visitedFaces,
+        traversalPath,
+        coloredFaces
+    };
+}
+
+function colorMovingFaces(FOLD, startVertex, dfsLeftToRightEdges, movingAndNotMovingFaces) {
+    // Create a copy of moving faces to track uncolored faces
+    const movingFaces = [...movingAndNotMovingFaces.movingFaces];
+    
+    // Map to store colored faces
+    const coloredFacesMap = {};
+    
+    // Function to get the next color name
+    const getNextColor = () => {
+        const colorCount = Object.keys(coloredFacesMap).length;
+        return `color${colorCount + 1}`;
+    };
+    
+    // Function to check if a face is already colored
+    const isFaceColored = (faceIndex) => {
+        return Object.values(coloredFacesMap).some(faces => faces.includes(faceIndex));
+    };
+    
+    // Find the first uncolored moving face
+    const findUncoloredMovingFace = () => {
+        return movingFaces.find(face => !isFaceColored(face));
+    };
+    
+    // Main coloring loop
+    while (true) {
+        // Find an uncolored moving face to start the search
+        const startFace = findUncoloredMovingFace();
+        
+        // If no uncolored faces remain, we're done
+        if (startFace === undefined) break;
+        
+        // Determine the current color
+        const currentColor = getNextColor();
+        
+        // Perform DFS traversal
+        const { visitedFaces } = dfsFaceTraversal(
+            FOLD, 
+            FOLD.faces_vertices[startFace].find(v => movingAndNotMovingFaces.movingFaces.includes(startFace)), 
+            dfsLeftToRightEdges, 
+            {
+                movingFaces: movingFaces.filter(face => !isFaceColored(face))
+            }
+        );
+        
+        // Store the visited faces under the current color
+        coloredFacesMap[currentColor] = [...visitedFaces];
+    }
+    
+    console.log('Colored faces map:', coloredFacesMap);
+    return coloredFacesMap;
+}
+
+function findSimilarAngleEdges(dfsLeftToRightEdges, verticesCoords, angleThreshold = 0.1) {
+    // Convert dfsLeftToRightEdges to an array of edges (vertex pairs)
+    const edges = Array.from(dfsLeftToRightEdges.keys()).map(edgeKey => 
+        edgeKey.split(',').map(Number)
+    );
+
+    // Function to calculate angle between two vertices
+    const calculateAngle = (v1Coords, v2Coords) => {
+        // Calculate the vector from v1 to v2
+        const dx = v2Coords[0] - v1Coords[0];
+        const dy = v2Coords[1] - v1Coords[1];
+        
+        // Calculate the angle using arctangent
+        return Math.atan2(dy, dx);
+    };
+
+    // If no edges, return empty set
+    if (edges.length === 0) return new Set();
+
+    // Use the first edge to establish reference angle
+    const [firstV1, firstV2] = edges[0];
+    const firstV1Coords = verticesCoords[firstV1];
+    const firstV2Coords = verticesCoords[firstV2];
+    const referenceAngle = calculateAngle(firstV1Coords, firstV2Coords);
+
+    // Set to store edges with similar angles
+    const similarAngleEdges = new Set([edges[0].toString()]);
+
+    // Iterate through remaining edges
+    for (let i = 1; i < edges.length; i++) {
+        const [v1, v2] = edges[i];
+        const v1Coords = verticesCoords[v1];
+        const v2Coords = verticesCoords[v2];
+        
+        // Calculate current edge's angle
+        const currentAngle = calculateAngle(v1Coords, v2Coords);
+        
+        // Compare angles
+        const angleDifference = Math.abs(currentAngle - referenceAngle);
+        
+        // Check if angle is similar (within threshold)
+        if (angleDifference < angleThreshold || 
+            Math.abs(angleDifference - Math.PI) < angleThreshold) {
+            similarAngleEdges.add(edges[i].toString());
+        }
+    }
+
+    console.log('similar angle edges:', similarAngleEdges);
+    return similarAngleEdges;
+}
+
+
+
+
+
 
