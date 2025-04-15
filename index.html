@@ -3,28 +3,106 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Origami Fold Visualizer</title>
+    <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <h2>Upload fold file and determine outer edges</h2>
-    <a href="https://github.com/ommaityNUS/FYP-origami-implementation">link to github</a>
-    <br>
-    <input type="file" id="foldFile">
+    <div class="container">
+        <header>
+            <h1>Origami Fold Visualizer</h1>
+            <p class="subtitle">Analyze and visualize origami fold patterns with interactive tools</p>
+            <a href="https://github.com/ommaityNUS/FYP-origami-implementation" class="github-link" target="_blank">
+                <i>&#x1F4BE;</i> View on GitHub
+            </a>
+        </header>
+        
+        <section class="upload-section">
+            <h2 class="upload-title">Upload Your FOLD File</h2>
+            <div class="file-input-wrapper">
+                <div class="file-input-button">Choose File</div>
+                <input type="file" id="foldFile" class="file-input" accept=".fold,.json">
+            </div>
+            <div class="file-name" id="file-name-display">No file selected</div>
+        </section>
+        
+        <div class="loading-indicator" id="loading-indicator">
+            <div class="spinner"></div>
+            <span>Processing your fold file...</span>
+        </div>
+        
+        <section class="visualization-section">
+            <div id="visualization-container" class="visualization-container">
+                <!-- The main.js script will insert container1 and container2 before outerEdgeNodes -->
+            </div>
+        </section>
+        
+        <section class="info-section">
+            <h3 class="info-title">Visualization Data</h3>
+            <div class="info-content active">
+                <!-- This div will hold the generated diagrams side by side -->
+                <div id="diagrams-container" class="visualization-container">
+                    <!-- The script will dynamically insert visualizations here -->
+                </div>
+            </div>
+        </section>
+        
+        <footer>
+            <p>Origami Fold Visualizer 2025 | A tool for analyzing origami fold patterns</p>
+        </footer>
+    </div>
     
-    <!-- Checkboxes -->
-    <!-- <label>
-        <input type="checkbox" id="displayFacegraph"> Display Facegraph
-    </label>
-    <label>
-        <input type="checkbox" id="labelVertices"> Label Vertices
-    </label> -->
-    <br>
-    <!-- <div><svg width ="500" height ="500" id="svg-container"></svg></div> -->
+    <div class="tooltip" id="tooltip"></div>
     
-    <pre id="outerEdgeNodes"></pre>
-    <pre id="adjacentFaces"></pre>
-    <pre id="globalFO"></pre>
-    <pre id="leftOrRight"></pre>
+    <script>
+        // Display selected filename
+        document.getElementById('foldFile').addEventListener('change', function(event) {
+            const fileName = event.target.files[0] ? event.target.files[0].name : 'No file selected';
+            document.getElementById('file-name-display').textContent = fileName;
+            
+            // Show loading indicator
+            document.getElementById('loading-indicator').style.display = 'block';
+            
+            // Hide it after a small delay to ensure the main script has time to process
+            setTimeout(() => {
+                document.getElementById('loading-indicator').style.display = 'none';
+            }, 1000);
+        });
+        
+        // Check for the containers and ensure they're displayed correctly
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.type === 'childList') {
+                    // Check if our containers are present
+                    const container1 = document.getElementById('container1');
+                    const container2 = document.getElementById('container2');
+                    
+                    if (container1 && container2) {
+                        // Move both containers into our diagrams-container
+                        const diagramsContainer = document.getElementById('diagrams-container');
+                        
+                        // Only move if they're not already in the diagrams container
+                        if (container1.parentElement !== diagramsContainer) {
+                            diagramsContainer.appendChild(container1);
+                        }
+                        
+                        if (container2.parentElement !== diagramsContainer) {
+                            diagramsContainer.appendChild(container2);
+                        }
+                        
+                        // Style them to display side by side
+                        container1.style.display = 'inline-block';
+                        container1.style.verticalAlign = 'top';
+                        container2.style.display = 'inline-block';
+                        container2.style.verticalAlign = 'top';
+                    }
+                }
+            });
+        });
+        
+        // Start observing the document body for added nodes
+        observer.observe(document.body, { childList: true, subtree: true });
+    </script>
+    
     <script type="module" src="main.js"></script>
 </body>
 </html>

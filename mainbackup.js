@@ -26,37 +26,50 @@ const uploadFile = (event) => {
             const FO = FOLD["faceOrders"];
             edgeFaceAdjacency = findAdjacentFaces(FV, FO);
             const EA = createEdgesAssignment(edgeFaceAdjacency, EV);
-            //faces directions
             const FD = X.V_FV_EV_EA_2_Vf_Ff(VC, FV, EV, EA)[1]   
+     
+            // const outerEdgeNodes = findOuterEdgeNodes(FV);
+            document.getElementById('outerEdgeNodes').textContent = "Outer edge nodes are: " + Array.from(outerEdgeNodes);
+            
+            let adjacentFaces = "edge -> [f1, f2, order]";
+            findAdjacentFaces(FV, FO).forEach((value, key) => {
+                adjacentFaces += `\n${key} -> [${value.join(", ")}]`;
+            });
+            document.getElementById('adjacentFaces').textContent = adjacentFaces;
+
+            let globalFO = "face -> [up?]" 
+            FD.forEach((value, key) => {
+                globalFO += `\n${key} -> [${value}]`;
+            })
+            document.getElementById('globalFO').textContent = globalFO
         }
 
         const drawSVG = (folded, FOLD, edgeFaceAdjacency, movingAndNotMovingFaces) => {
-    let globalNextColorNumber = 1;
-    // console.log(movingAndNotMovingFaces)
-    
-    if (document.getElementById('container2')) {
-        document.getElementById('container2').remove()
-        document.getElementById('container1').remove()
-    } 
-    const displayFacegraph = document.getElementById('faceGraph');
-    // const labelVertices = document.getElementById('labelVertices');
-    let VC = FOLD["vertices_coords"]; 
-    let EV = FOLD["edges_vertices"]; 
-    let FV = FOLD["faces_vertices"]; 
-    if (!EV) {
-        EV = constructEdgesVertices(FV);
-    }
-    let FO = FOLD["faceOrders"];
-    edgeFaceAdjacency = findAdjacentFaces(FV, FO);
-    let EA = createEdgesAssignment(edgeFaceAdjacency, EV); // edge assignment
-    let FD = '' // face direction
-    let greenArrows = [];
-    
-    // CHANGE THESE VALUES TO MAKE THE DIAGRAMS BIGGER
-    const svgSize = 800; // Increased from 500 to 700
-    const padding = 18; // Increased from 20 to 30
-    const effectiveSize = svgSize - (2 * padding);
-    const svgNameSpace = 'http://www.w3.org/2000/svg';
+            let globalNextColorNumber = 1;
+            // console.log(movingAndNotMovingFaces)
+            
+            if (document.getElementById('container2')) {
+                document.getElementById('container2').remove()
+                document.getElementById('container1').remove()
+            } 
+            const displayFacegraph = document.getElementById('faceGraph');
+            // const labelVertices = document.getElementById('labelVertices');
+            let VC = FOLD["vertices_coords"]; 
+            let EV = FOLD["edges_vertices"]; 
+            let FV = FOLD["faces_vertices"]; 
+            if (!EV) {
+                EV = constructEdgesVertices(FV);
+            }
+            let FO = FOLD["faceOrders"];
+            edgeFaceAdjacency = findAdjacentFaces(FV, FO);
+            let EA = createEdgesAssignment(edgeFaceAdjacency, EV); // edge assignment
+            let FD = '' // face direction
+            let greenArrows = [];
+            
+            const svgSize = 500;
+            const padding = 20;
+            const effectiveSize = svgSize - (2 * padding);
+            const svgNameSpace = 'http://www.w3.org/2000/svg';
         
             // State variables for toggle features
             let showVertexLabels = true;
@@ -98,12 +111,12 @@ const uploadFile = (event) => {
                 container2 = document.createElement('div')
                 container2.id = 'container2'
                 container2.style.display = 'inline-block';
-                document.getElementById('diagrams-container').appendChild(container2);
+                document.getElementById('outerEdgeNodes').insertAdjacentElement('beforebegin', container2);
             } else {
                 container1 = document.createElement('div')
                 container1.id = 'container1'
                 container1.style.display = 'inline-block';
-                document.getElementById('diagrams-container').appendChild(container1);
+                document.getElementById('outerEdgeNodes').insertAdjacentElement('beforebegin', container1);
             }
             
             const svg = document.createElementNS(svgNameSpace, 'svg');
@@ -138,7 +151,7 @@ const uploadFile = (event) => {
                 updateHighlightedEdges(vertexId);
             };
 
-            const updateHighlightedEdges = (vertexId) => {
+            function updateHighlightedEdges(vertexId) {
                 if (!vertexId) return;
                 
                 // Remove ALL highlighted edge lines
@@ -175,7 +188,7 @@ const uploadFile = (event) => {
                     FOLD, 
                     vertexId, 
                     edgesToUseForColoring, 
-                    movingAndNotMovingFaces.movingFaces, 
+                    movingAndNotMovingFaces, 
                     edgeFaceAdjacency,
                     globalNextColorNumber  // This increments on each click
                 );
@@ -653,20 +666,13 @@ const uploadFile = (event) => {
         drawSVG("unfolded", FOLD, edgeFaceAdjacency, movingAndNotMovingFaces); 
         drawSVG("folded", FOLD, edgeFaceAdjacency, movingAndNotMovingFaces);
         const unfoldedVertices = findUnfoldedVertices(edgeFaceAdjacency);
-        const filteredUnfoldedVerticesMoving = filterUnfoldedVerticesAdjacentToMovingFaces(unfoldedVertices, FOLD, movingAndNotMovingFaces.movingFaces);
-        const filteredUnfoldedVerticesNotMoving = filterUnfoldedVerticesAdjacentToMovingFaces(unfoldedVertices, FOLD, movingAndNotMovingFaces.notMovingFaces);
+        const filteredUnfoldedVertices = filterUnfoldedVerticesAdjacentToMovingFaces(unfoldedVertices, FOLD, movingAndNotMovingFaces);
         // console.log("filtered unfolded vertices", filteredUnfoldedVertices);
         setLeftRightOrderFO(FOLD["faces_vertices"], arrowset);
         const edgeLeftOrRight = setLeftRightOrderFO(FOLD["faces_vertices"], arrowset);
-        const colorMap1 = mapVertexToColorings(FOLD, filteredUnfoldedVerticesMoving, movingAndNotMovingFaces.movingFaces, edgeFaceAdjacency, unfoldedVertices, edgeLeftOrRight, false);
-        const colorMap2 = mapVertexToColorings(FOLD, filteredUnfoldedVerticesNotMoving, movingAndNotMovingFaces.notMovingFaces, edgeFaceAdjacency, unfoldedVertices, edgeLeftOrRight, false);
-        const colorMapR1 = mapVertexToColorings(FOLD, filteredUnfoldedVerticesMoving, movingAndNotMovingFaces.movingFaces, edgeFaceAdjacency, unfoldedVertices, edgeLeftOrRight, true);
-        const colorMapR2 = mapVertexToColorings(FOLD, filteredUnfoldedVerticesNotMoving, movingAndNotMovingFaces.notMovingFaces, edgeFaceAdjacency, unfoldedVertices, edgeLeftOrRight, true);
+        const fullColorMap = mapVertexToColorings(FOLD, filteredUnfoldedVertices, movingAndNotMovingFaces, edgeFaceAdjacency, unfoldedVertices, edgeLeftOrRight);
 
-        console.log("colorMap1", colorMap1);
-        console.log("colorMap2", colorMap2);
-        console.log("colorMapR1", colorMapR1);
-        console.log("colorMapR2", colorMapR2);
+        console.log("full color map", fullColorMap);
 
     };
     
@@ -1021,40 +1027,9 @@ const dfsLeftToRightEdges = (startVertex, edgeLeftOrRight, unfoldedVertices, mov
     return validEdges;
 };
 
-const labelFaces = (FOLD, startFaceIndex) => {
+function labelFaces(FOLD, startFaceIndex) {
     const FV = FOLD.faces_vertices;
     const edgeFaceAdjacency = findAdjacentFaces(FV, FOLD.faceOrders);
-    
-    // Function to get adjacent faces - defined before it's used
-    const getAdjacentFaces = (faceIndex) => {
-        const adjacentFaces = [];
-        
-        // For each edge of the current face
-        FV[faceIndex].forEach((v1, i) => {
-            const v2 = FV[faceIndex][(i + 1) % FV[faceIndex].length];
-            const edgeKey = [v1, v2].toString();
-            const reverseEdgeKey = [v2, v1].toString();
-            
-            // Get the edge data
-            const edgeData = edgeFaceAdjacency.get(edgeKey) || edgeFaceAdjacency.get(reverseEdgeKey);
-            
-            if (!edgeData) return;
-            
-            // Find the adjacent face
-            const [f1, f2, foldOrder] = edgeData;
-            const adjacentFace = f1 === faceIndex ? f2 : f1;
-            
-            // Skip if no adjacent face
-            if (adjacentFace === undefined) return;
-            
-            // Check if it's an unfolded line
-            const isUnfolded = foldOrder === undefined;
-            
-            adjacentFaces.push({ adjacentFace, isUnfolded });
-        });
-        
-        return adjacentFaces;
-    };
     
     // Initialize face labels
     const faceLabels = new Map();
@@ -1097,11 +1072,42 @@ const labelFaces = (FOLD, startFaceIndex) => {
         }
     }
     
+    // Function to get adjacent faces
+    function getAdjacentFaces(faceIndex) {
+        const adjacentFaces = [];
+        
+        // For each edge of the current face
+        FV[faceIndex].forEach((v1, i) => {
+            const v2 = FV[faceIndex][(i + 1) % FV[faceIndex].length];
+            const edgeKey = [v1, v2].toString();
+            const reverseEdgeKey = [v2, v1].toString();
+            
+            // Get the edge data
+            const edgeData = edgeFaceAdjacency.get(edgeKey) || edgeFaceAdjacency.get(reverseEdgeKey);
+            
+            if (!edgeData) return;
+            
+            // Find the adjacent face
+            const [f1, f2, foldOrder] = edgeData;
+            const adjacentFace = f1 === faceIndex ? f2 : f1;
+            
+            // Skip if no adjacent face
+            if (adjacentFace === undefined) return;
+            
+            // Check if it's an unfolded line
+            const isUnfolded = foldOrder === undefined;
+            
+            adjacentFaces.push({ adjacentFace, isUnfolded });
+        });
+        
+        return adjacentFaces;
+    }
+    
     return faceLabels;
 }
 
 // Helper function to find alternating connected components
-const findAlternatingGroups = (FOLD, startFaceIndex) => {
+function findAlternatingGroups(FOLD, startFaceIndex) {
     const faceLabels = labelFaces(FOLD, startFaceIndex);
    
     const movingFaces = [];
@@ -1123,7 +1129,7 @@ const findAlternatingGroups = (FOLD, startFaceIndex) => {
     return { movingFaces, notMovingFaces };
 }
 
-const swapMovingAndNotMovingFaces = (faceLabels) => {
+function swapMovingAndNotMovingFaces(faceLabels) {
     // Destructure the existing face labels
     const { movingFaces, notMovingFaces } = faceLabels;
 
@@ -1134,9 +1140,159 @@ const swapMovingAndNotMovingFaces = (faceLabels) => {
     };
 }
 
-const colorMovingFaces = (FOLD, startVertex, dfsLeftToRightEdges, movingFaces, edgeFaceAdjacency, nextColorNumber = 1) => {
+// function dfsFaceTraversal(FOLD, startVertex, dfsLeftToRightEdges, movingAndNotMovingFaces) {
+//     // Validate inputs
+//     if (!FOLD || !FOLD.faces_vertices) {
+//         console.error('Invalid FOLD object');
+//         return {
+//             visitedFaces: new Set(),
+//             traversalPath: [],
+//             coloredFaces: new Set()
+//         };
+//     }
+//     const FV = FOLD.faces_vertices;
+   
+//     // Ensure startVertex is a number
+//     startVertex = Number(startVertex);
+
+//     // Find faces containing the starting vertex that are also in movingFaces
+//     const adjacentFacesOfVertex = FV.reduce((faces, face, faceIndex) => {
+//         if (face.includes(startVertex) && 
+//             movingAndNotMovingFaces.movingFaces.includes(faceIndex)) {
+//             faces.add(faceIndex);
+//         }
+//         return faces;
+//     }, new Set());
+
+//     // If no adjacent faces found, return empty results
+//     if (adjacentFacesOfVertex.size === 0) {
+//         console.warn(`No moving faces found containing vertex ${startVertex}`);
+//         return {
+//             visitedFaces: new Set(),
+//             traversalPath: [],
+//             coloredFaces: new Set()
+//         };
+//     }
+
+//     // Safely get edge face adjacency
+//     let edgeFaceAdjacency;
+//     try {
+//         edgeFaceAdjacency = findAdjacentFaces(FV, FOLD.faceOrders || []);
+//     } catch (error) {
+//         console.error('Error finding adjacent faces:', error);
+//         return {
+//             visitedFaces: new Set(),
+//             traversalPath: [],
+//             coloredFaces: new Set()
+//         };
+//     }
+
+//     // Select the first face to start DFS
+//     const startFace = [...adjacentFacesOfVertex][0];
+   
+//     // Track visited faces and traversal path
+//     const visitedFaces = new Set();
+//     const traversalPath = [];
+//     const coloredFaces = new Set();
+
+//     // Stack for DFS traversal
+//     const stack = [{
+//         currentFace: startFace,
+//         parentFace: null,
+//         depth: 0
+//     }];
+
+//     const MAX_DEPTH = FV.length * 2; // Prevent infinite loops
+//     while (stack.length > 0) {
+//         const {
+//             currentFace,
+//             parentFace,
+//             depth
+//         } = stack.pop();
+
+//         // Prevent infinite loops
+//         if (depth > MAX_DEPTH) {
+//             console.warn('Max depth reached, stopping traversal');
+//             break;
+//         }
+
+//         // Skip already visited faces
+//         if (visitedFaces.has(currentFace)) continue;
+
+//         // Mark current face as visited and colored
+//         visitedFaces.add(currentFace);
+//         coloredFaces.add(currentFace);
+//         traversalPath.push(currentFace);
+
+//         // Explore edges of the current face
+//         for (let i = 0; i < FV[currentFace].length; i++) {
+//             const v1 = FV[currentFace][i];
+//             const v2 = FV[currentFace][(i + 1) % FV[currentFace].length];
+           
+//             // Create edge keys
+//             const edgeKey = [v1, v2].toString();
+//             const reverseEdgeKey = [v2, v1].toString();
+           
+//             // Get the edge data
+//             const edgeData = edgeFaceAdjacency.get(edgeKey) ||
+//                              edgeFaceAdjacency.get(reverseEdgeKey);
+           
+//             if (!edgeData) continue;
+           
+//             // Find the adjacent face
+//             const [f1, f2, foldOrder] = edgeData;
+//             const adjacentFace = f1 === currentFace ? f2 : f1;
+           
+//             // Skip if no adjacent face or is the parent face
+//             if (adjacentFace === undefined || adjacentFace === parentFace) continue;
+           
+//             // Skip if already visited
+//             if (visitedFaces.has(adjacentFace)) continue;
+
+//             // Only continue if the adjacent face is in movingFaces
+//             if (!movingAndNotMovingFaces.movingFaces.includes(adjacentFace)) continue;
+           
+//             // Check if it's an unfolded edge
+//             const isUnfoldedEdge = foldOrder === undefined;
+           
+//             // Check if the edge is in dfsLeftToRightEdges
+//             let isLeftToRightEdge = false;
+//             if (dfsLeftToRightEdges) {
+//                 const leftToRightEdgeKey = [v1, v2].toString();
+//                 const reverseLeftToRightEdgeKey = [v2, v1].toString();
+//                 isLeftToRightEdge =
+//                     dfsLeftToRightEdges.has(leftToRightEdgeKey) ||
+//                     dfsLeftToRightEdges.has(reverseLeftToRightEdgeKey);
+//             }
+           
+//             // If unfolded edge or left-to-right edge, backtrack
+//             if (isUnfoldedEdge || isLeftToRightEdge) {
+//                 // Do not add this face to the stack
+//                 continue;
+//             }
+           
+//             // Add to stack for further exploration
+//             stack.push({
+//                 currentFace: adjacentFace,
+//                 parentFace: currentFace,
+//                 depth: depth + 1
+//             });
+//         }
+//     }
+
+//     // console.log('Visited faces:', visitedFaces);
+//     // console.log('Traversal path:', traversalPath);
+//     // console.log('Colored faces:', coloredFaces);
+//     return {
+//         visitedFaces,
+//         traversalPath,
+//         coloredFaces
+//     };
+// }
+
+function colorMovingFaces(FOLD, startVertex, dfsLeftToRightEdges, movingAndNotMovingFaces, edgeFaceAdjacency, nextColorNumber = 1) {
     // Create efficient data structures for lookups
-    const movingFacesSet = new Set(movingFaces);
+    const movingFacesSet = new Set(movingAndNotMovingFaces.movingFaces);
     const coloredFacesSet = new Set(); // Track which faces have been colored
     const coloredFacesMap = {};
     
@@ -1155,7 +1311,7 @@ const colorMovingFaces = (FOLD, startVertex, dfsLeftToRightEdges, movingFaces, e
     const adjacencyMap = edgeFaceAdjacency || findAdjacentFaces(FOLD.faces_vertices, FOLD.faceOrders || []);
     
     // Efficient DFS traversal that doesn't call the full dfsFaceTraversal
-    const traverseComponent = (startFace) => {
+    function traverseComponent(startFace) {
         const visitedFaces = new Set();
         const stack = [startFace];
         
@@ -1238,7 +1394,7 @@ const colorMovingFaces = (FOLD, startVertex, dfsLeftToRightEdges, movingFaces, e
     };
 }
 
-const findSimilarAngleEdges = (dfsLeftToRightEdges, verticesCoords, angleThreshold = 0.1) => {
+function findSimilarAngleEdges(dfsLeftToRightEdges, verticesCoords, angleThreshold = 0.1) {
     // If there are no edges, return empty map
     if (dfsLeftToRightEdges.size === 0) return new Map();
 
@@ -1295,13 +1451,13 @@ const findSimilarAngleEdges = (dfsLeftToRightEdges, verticesCoords, angleThresho
         }
     }
 
-    // console.log('Similar angle edges found:', similarAngleEdges);
+    console.log('Similar angle edges found:', similarAngleEdges);
     return similarAngleEdges;
 }
 
-const filterUnfoldedVerticesAdjacentToMovingFaces = (unfoldedVertices, FOLD, movingFaces) => {
+function filterUnfoldedVerticesAdjacentToMovingFaces(unfoldedVertices, FOLD, movingAndNotMovingFaces) {
     const FV = FOLD.faces_vertices;
-    const movingFacesSet = new Set(movingFaces);
+    const movingFacesSet = new Set(movingAndNotMovingFaces.movingFaces);
     const filteredUnfoldedVertices = new Set();
 
     // Iterate through unfolded vertices
@@ -1324,7 +1480,7 @@ const filterUnfoldedVerticesAdjacentToMovingFaces = (unfoldedVertices, FOLD, mov
     return filteredUnfoldedVertices;
 }
 
-const mapVertexToColorings = (FOLD, filteredUnfoldedVertices, movingFaces, edgeFaceAdjacency, unfoldedVertices, edgeLeftOrRight, reverse) => {
+function mapVertexToColorings(FOLD, filteredUnfoldedVertices, movingAndNotMovingFaces, edgeFaceAdjacency, unfoldedVertices, edgeLeftOrRight) {
     // Create a map to store the results
     const vertexColoringMap = new Map();
     
@@ -1334,23 +1490,21 @@ const mapVertexToColorings = (FOLD, filteredUnfoldedVertices, movingFaces, edgeF
     // Iterate through each filtered unfolded vertex
     for (const vertex of filteredUnfoldedVertices) {
         // Get the dfsLeftToRightEdges for this vertex
-        let visitedEdges = dfsLeftToRightEdges(
+        const visitedEdges = dfsLeftToRightEdges(
             vertex,
             edgeLeftOrRight,
             unfoldedVertices,
-            movingFaces
+            movingAndNotMovingFaces.movingFaces
         );
 
-        if (reverse) {
-        visitedEdges = findSimilarAngleEdges(visitedEdges, FOLD["vertices_coords"], unfoldedVertices, 0.1);
-        }
+        const reverseSeperators = findSimilarAngleEdges(visitedEdges, FOLD["vertices_coords"], unfoldedVertices, 0.1);
         
         // Run colorMovingFaces with these edges, pre-computed adjacency, and the next color number
         const result = colorMovingFaces(
             FOLD, 
             vertex, 
-            visitedEdges, 
-            movingFaces, 
+            reverseSeperators, 
+            movingAndNotMovingFaces, 
             edgeFaceAdjacency,
             nextColorNumber
         );
