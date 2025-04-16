@@ -31,32 +31,32 @@ const uploadFile = (event) => {
         }
 
         const drawSVG = (folded, FOLD, edgeFaceAdjacency, movingAndNotMovingFaces) => {
-    let globalNextColorNumber = 1;
-    // console.log(movingAndNotMovingFaces)
-    
-    if (document.getElementById('container2')) {
-        document.getElementById('container2').remove()
-        document.getElementById('container1').remove()
-    } 
-    const displayFacegraph = document.getElementById('faceGraph');
-    // const labelVertices = document.getElementById('labelVertices');
-    let VC = FOLD["vertices_coords"]; 
-    let EV = FOLD["edges_vertices"]; 
-    let FV = FOLD["faces_vertices"]; 
-    if (!EV) {
-        EV = constructEdgesVertices(FV);
-    }
-    let FO = FOLD["faceOrders"];
-    edgeFaceAdjacency = findAdjacentFaces(FV, FO);
-    let EA = createEdgesAssignment(edgeFaceAdjacency, EV); // edge assignment
-    let FD = '' // face direction
-    let greenArrows = [];
-    
-    // CHANGE THESE VALUES TO MAKE THE DIAGRAMS BIGGER
-    const svgSize = 800; // Increased from 500 to 700
-    const padding = 18; // Increased from 20 to 30
-    const effectiveSize = svgSize - (2 * padding);
-    const svgNameSpace = 'http://www.w3.org/2000/svg';
+            let globalNextColorNumber = 1;
+            // console.log(movingAndNotMovingFaces)
+            
+            if (document.getElementById('container2')) {
+                document.getElementById('container2').remove()
+                document.getElementById('container1').remove()
+            } 
+            const displayFacegraph = document.getElementById('faceGraph');
+            // const labelVertices = document.getElementById('labelVertices');
+            let VC = FOLD["vertices_coords"]; 
+            let EV = FOLD["edges_vertices"]; 
+            let FV = FOLD["faces_vertices"]; 
+            if (!EV) {
+                EV = constructEdgesVertices(FV);
+            }
+            let FO = FOLD["faceOrders"];
+            edgeFaceAdjacency = findAdjacentFaces(FV, FO);
+            let EA = createEdgesAssignment(edgeFaceAdjacency, EV); // edge assignment
+            let FD = '' // face direction
+            let greenArrows = [];
+            
+            // CHANGE THESE VALUES TO MAKE THE DIAGRAMS BIGGER
+            const svgSize = 800; // Increased from 500 to 700
+            const padding = 18; // Increased from 20 to 30
+            const effectiveSize = svgSize - (2 * padding);
+            const svgNameSpace = 'http://www.w3.org/2000/svg';
         
             // State variables for toggle features
             let showVertexLabels = true;
@@ -475,7 +475,7 @@ const uploadFile = (event) => {
                 controlPanel.style.display = 'flex';
                 controlPanel.style.gap = '10px';
                 controlPanel.style.justifyContent = 'center';
-        
+            
                 // Create toggle button for vertex labels
                 const toggleLabelsBtn = document.createElement('button');
                 toggleLabelsBtn.textContent = 'Toggle Vertex Labels';
@@ -497,22 +497,22 @@ const uploadFile = (event) => {
                     showGreenArrows = !showGreenArrows;
                     greenArrowsGroup.style.display = showGreenArrows ? 'block' : 'none';
                 });
-
+            
                 const toggleFaceLabelsBtn = document.createElement('button');
                 toggleFaceLabelsBtn.textContent = 'Toggle Face Labels';
                 toggleFaceLabelsBtn.style.padding = '5px 10px';
                 toggleFaceLabelsBtn.style.cursor = 'pointer';
-
+            
                 toggleFaceLabelsBtn.addEventListener('click', () => {
                     showFaceLabels = !showFaceLabels;
                     faceLabelsGroup.style.display = showFaceLabels ? 'block' : 'none';
                 });
-
+            
                 const toggleMovingFacesBtn = document.createElement('button');
                 toggleMovingFacesBtn.textContent = 'Swap Moving Faces';
                 toggleMovingFacesBtn.style.padding = '5px 10px';
                 toggleMovingFacesBtn.style.cursor = 'pointer';
-
+                        
                 toggleMovingFacesBtn.addEventListener('click', () => {
                     // Swap the moving and not moving faces
                     movingAndNotMovingFaces = swapMovingAndNotMovingFaces(movingAndNotMovingFaces);
@@ -572,19 +572,58 @@ const uploadFile = (event) => {
                 dropdownLabel.textContent = 'Separator Type: ';
                 dropdownLabel.style.marginLeft = '10px';
                 dropdownLabel.appendChild(separatorDropdown);
+
+                const resetButton = document.createElement('button');
+                resetButton.textContent = 'Reset Drawing';
+                resetButton.style.padding = '5px 10px';
+                resetButton.style.cursor = 'pointer';
+                resetButton.style.backgroundColor = '#f44336'; // Red color
+                resetButton.style.color = 'white';
+                resetButton.style.border = 'none';
+                resetButton.style.borderRadius = '4px';
+                resetButton.style.marginLeft = '10px';
+
+                resetButton.addEventListener('click', () => {
+                    // Reset vertex highlights
+                    const highlightedCircles = svg.querySelectorAll('[id^="highlight_"]');
+                    highlightedCircles.forEach(circle => {
+                        circle.setAttribute('fill', 'transparent');
+                    });
+                    
+                    // Reset edge highlights - remove any purple or orange lines
+                    const highlightedEdges = svg.querySelectorAll('line[stroke="purple"], line[stroke="orange"]');
+                    highlightedEdges.forEach(line => line.remove());
+                    
+                    // Reset face shadings - remove colorings from shadeFacesByComponents
+                    const coloredFaces = svg.querySelectorAll('path.colored-face-component');
+                    coloredFaces.forEach(path => path.remove());
+                    
+                    // IMPORTANT: Remove ALL grey face shadings before adding new ones
+                    const greyFaceShadings = svg.querySelectorAll('path[fill="rgba(128, 128, 128, 0.3)"]');
+                    greyFaceShadings.forEach(path => path.remove());
+                    
+                    // Reset current selected vertex
+                    currentSelectedVertex = null;
+                    
+                    // Reset global color counter to its initial value
+                    globalNextColorNumber = 1;
+                    
+                    // Re-apply moving faces shadings with clean slate
+                    if (movingAndNotMovingFaces && movingAndNotMovingFaces.movingFaces) {
+                        shadeFaces(FV, VC, movingAndNotMovingFaces.movingFaces, minX, maxX, minY, maxY);
+                    }
+                    
+                    console.log("Drawing reset to default state");
+                });
             
                 // Add buttons to control panel
                 controlPanel.appendChild(toggleLabelsBtn);
                 controlPanel.appendChild(toggleArrowsBtn);
                 controlPanel.appendChild(toggleFaceLabelsBtn);
-                
-                // Add the new toggle button here
                 controlPanel.appendChild(toggleMovingFacesBtn);
-
-                // Add the dropdown to the control panel
                 controlPanel.appendChild(dropdownLabel);
+                controlPanel.appendChild(resetButton);
                 
-                // Append SVG and controls to container
                 container1.appendChild(svg);
                 container1.appendChild(controlPanel);
                 
