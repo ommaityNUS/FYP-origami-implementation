@@ -1277,7 +1277,7 @@ const colorMovingFaces = (FOLD, startVertex, dfsLeftToRightEdges, movingFaces, e
     };
 }
 
-const findSimilarAngleEdges = (dfsLeftToRightEdges, verticesCoords, angleThreshold = 0.1) => {
+const findSimilarAngleEdges = (dfsLeftToRightEdges, verticesCoords, angleThreshold = 0.1, distanceThreshold = 0.01) => {
     // If there are no edges, return empty map
     if (dfsLeftToRightEdges.size === 0) return new Map();
 
@@ -1298,44 +1298,70 @@ const findSimilarAngleEdges = (dfsLeftToRightEdges, verticesCoords, angleThresho
         return Math.atan2(dy, dx);
     };
 
-    // Initialize result map with the same structure as dfsLeftToRightEdges
-    const similarAngleEdges = new Map();
-    
-    // If no edges, return empty map
-    if (edgesWithData.length === 0) return similarAngleEdges;
+    // Function to check if a point is on a line defined by two other points
+    const isPointOnLine = (lineStart, lineEnd, point, threshold) => {
+        // Calculate line parameters: ax + by + c = 0
+        const a = lineEnd[1] - lineStart[1]; // dy
+        const b = lineStart[0] - lineEnd[0]; // -dx
+        const c = lineEnd[0] * lineStart[1] - lineStart[0] * lineEnd[1]; // x2*y1 - x1*y2
+        
+        // Normalize to get unit coefficients
+        const norm = Math.sqrt(a * a + b * b);
+        if (norm < 1e-10) return false; // Avoid division by zero
+        
+        // Calculate perpendicular distance from point to line
+        const distance = Math.abs(a * point[0] + b * point[1] + c) / norm;
+        
+        return distance <= threshold;
+    };
 
-    // Use the first edge to establish reference angle
-    const firstEdge = edgesWithData[0];
-    const [firstV1, firstV2] = firstEdge.vertices;
-    const firstV1Coords = verticesCoords[firstV1];
-    const firstV2Coords = verticesCoords[firstV2];
-    const referenceAngle = calculateAngle(firstV1Coords, firstV2Coords);
-
-    // Add first edge to result
-    similarAngleEdges.set(firstEdge.key, firstEdge.data);
-
-    // Iterate through remaining edges
-    for (let i = 1; i < edgesWithData.length; i++) {
-        const edge = edgesWithData[i];
-        const [v1, v2] = edge.vertices;
+    // Function to check if two line segments are collinear
+    const areEdgesCollinear = (edge1Vertices, edge2Vertices) => {
+        const [v1, v2] = edge1Vertices;
+        const [v3, v4] = edge2Vertices;
+        
         const v1Coords = verticesCoords[v1];
         const v2Coords = verticesCoords[v2];
+        const v3Coords = verticesCoords[v3];
+        const v4Coords = verticesCoords[v4];
         
-        // Calculate current edge's angle
-        const currentAngle = calculateAngle(v1Coords, v2Coords);
+        // First check if edges are parallel (same angle within threshold)
+        const angle1 = calculateAngle(v1Coords, v2Coords);
+        const angle2 = calculateAngle(v3Coords, v4Coords);
         
-        // Compare angles
-        const angleDifference = Math.abs(currentAngle - referenceAngle);
+        const angleDifference = Math.abs(angle1 - angle2);
+        const isParallel = angleDifference < angleThreshold || 
+                           Math.abs(angleDifference - Math.PI) < angleThreshold;
         
-        // Check if angle is similar (within threshold)
-        if (angleDifference < angleThreshold || 
-            Math.abs(angleDifference - Math.PI) < angleThreshold) {
-            similarAngleEdges.set(edge.key, edge.data);
+        if (!isParallel) return false;
+        
+        // Then check if one endpoint from each edge lies on the same line
+        // For true collinearity, at least one point of edge2 should be on the line defined by edge1
+        return isPointOnLine(v1Coords, v2Coords, v3Coords, distanceThreshold) ||
+               isPointOnLine(v1Coords, v2Coords, v4Coords, distanceThreshold);
+    };
+
+    // Initialize result map with the same structure as dfsLeftToRightEdges
+    const collinearEdges = new Map();
+    
+    // If no edges, return empty map
+    if (edgesWithData.length === 0) return collinearEdges;
+
+    // Add first edge to result as our reference
+    const firstEdge = edgesWithData[0];
+    collinearEdges.set(firstEdge.key, firstEdge.data);
+
+    // Compare all other edges with the first one for collinearity
+    for (let i = 1; i < edgesWithData.length; i++) {
+        const edge = edgesWithData[i];
+        
+        if (areEdgesCollinear(firstEdge.vertices, edge.vertices)) {
+            collinearEdges.set(edge.key, edge.data);
         }
     }
 
-    // console.log('Similar angle edges found:', similarAngleEdges);
-    return similarAngleEdges;
+    console.log('Collinear edges found:', collinearEdges);
+    return collinearEdges;
 }
 
 const filterUnfoldedVerticesAdjacentToMovingFaces = (unfoldedVertices, FOLD, movingFaces) => {
